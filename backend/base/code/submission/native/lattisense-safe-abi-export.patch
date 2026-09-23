@@ -1,0 +1,134 @@
+diff --git a/fhe_ops_lib/lattigo/go_sdk/c_struct_import_export.go b/fhe_ops_lib/lattigo/go_sdk/c_struct_import_export.go
+index 085b3de..f4b328b 100644
+--- a/fhe_ops_lib/lattigo/go_sdk/c_struct_import_export.go
++++ b/fhe_ops_lib/lattigo/go_sdk/c_struct_import_export.go
+@@ -34,18 +34,6 @@ func export_component(src *[]uint64, dest *C.CComponent) {
+ 	copy(unsafe.Slice((*uint64)(unsafe.Pointer(dest.data)), N), *src)
+ }
+ 
+-// wrap_c_components_as_ring_poly creates a ring.Poly whose Coeffs slices
+-// point directly into C-allocated CComponent data. This allows ring
+-// operations (InvMForm, MulByPow2, etc.) to transform C memory in-place
+-// without an additional copy.
+-func wrap_c_components_as_ring_poly(comps []C.CComponent) *ring.Poly {
+-	poly := &ring.Poly{Coeffs: make([][]uint64, len(comps))}
+-	for i := range comps {
+-		poly.Coeffs[i] = unsafe.Slice((*uint64)(unsafe.Pointer(comps[i].data)), int(comps[i].n))
+-	}
+-	return poly
+-}
+-
+ func import_polynomial(src *C.CPolynomial, dest *ring.Poly) {
+ 	component_slice := unsafe.Slice(src.components, src.n_component)
+ 	for i := 0; i < int(src.n_component); i++ {
+@@ -88,13 +76,38 @@ func export_polynomial_qp(src *ringqp.Poly, dest *C.CPolynomial, level int, sp_l
+ 	}
+ }
+ 
+-func export_public_key(src *rlwe.CiphertextQP, dest *C.CPublicKey, level int, sp_level int) {
++func export_public_key(params rlwe.Parameters, src *rlwe.CiphertextQP, dest *C.CPublicKey, level int, sp_level int, mf_nbits int) {
+ 	dest.level = C.int(level)
+ 	dest.degree = C.int(1)
+ 	dest.polys = (*C.CPolynomial)(C.malloc(C.size_t(unsafe.Sizeof(C.CPolynomial{})) * C.size_t(2)))
+ 	poly_slice := unsafe.Slice(dest.polys, 2)
+ 	for i := 0; i < 2; i++ {
+-		export_polynomial_qp(&src.Value[i], &poly_slice[i], level, sp_level)
++		poly := &src.Value[i]
++		diff := mf_nbits - 64
++		if diff != 0 {
++			transformed := src.Value[i].CopyNew()
++			if level != -1 {
++				transformed.Q.Coeffs = transformed.Q.Coeffs[:level+1]
++			}
++			if sp_level != -1 {
++				transformed.P.Coeffs = transformed.P.Coeffs[:sp_level+1]
++			}
++
++			ringq := params.RingQ()
++			ringp := params.RingP()
++			if diff == -64 {
++				ringq.InvMForm(transformed.Q, transformed.Q)
++				ringp.InvMForm(transformed.P, transformed.P)
++			} else if diff > 0 {
++				ringq.MulByPow2(transformed.Q, diff, transformed.Q)
++				ringp.MulByPow2(transformed.P, diff, transformed.P)
++			} else {
++				ringq.InvMFormAndMulByPow2(transformed.Q, 64+diff, transformed.Q)
++				ringp.InvMFormAndMulByPow2(transformed.P, 64+diff, transformed.P)
++			}
++			poly = &transformed
++		}
++		export_polynomial_qp(poly, &poly_slice[i], level, sp_level)
+ 	}
+ }
+ 
+@@ -110,47 +123,14 @@ func export_key_switch_key(params rlwe.Parameters, src *rlwe.SwitchingKey, dest
+ 		}
+ 	}
+ 
+-	// Export directly from src (single copy: Go → C)
++	// Transform a Go-owned copy before exporting it. Constructing ring.Poly
++	// views over C allocations corrupted Go slice pointers under concurrent
++	// callbacks and eventually caused "found bad pointer in Go heap".
+ 	dest.n_public_key = C.int(n_public_key)
+ 	dest.public_keys = (*C.CPublicKey)(C.malloc(C.size_t(unsafe.Sizeof(C.CPublicKey{})) * C.size_t(n_public_key)))
+ 	public_key_slice := unsafe.Slice(dest.public_keys, n_public_key)
+ 	for i := 0; i < n_public_key; i++ {
+-		export_public_key(&src.Value[i][0], &public_key_slice[i], level, sp_level)
+-	}
+-
+-	// Transform C memory in-place (avoids CopyNew double-copy)
+-	diff := mf_nbits - 64
+-	if diff != 0 {
+-		ringq := params.RingQ()
+-		ringp := params.RingP()
+-
+-		// Determine Q/P component counts
+-		var n_q_component int
+-		if level == -1 {
+-			n_q_component = src.Value[0][0].Value[0].LevelQ() + 1
+-		} else {
+-			n_q_component = level + 1
+-		}
+-
+-		for i := 0; i < n_public_key; i++ {
+-			pk_poly_slice := unsafe.Slice(public_key_slice[i].polys, 2)
+-			for j := 0; j < 2; j++ {
+-				comp_slice := unsafe.Slice(pk_poly_slice[j].components, int(pk_poly_slice[j].n_component))
+-				q_poly := wrap_c_components_as_ring_poly(comp_slice[:n_q_component])
+-				p_poly := wrap_c_components_as_ring_poly(comp_slice[n_q_component:])
+-
+-				if diff == -64 {
+-					ringq.InvMForm(q_poly, q_poly)
+-					ringp.InvMForm(p_poly, p_poly)
+-				} else if diff > 0 {
+-					ringq.MulByPow2(q_poly, diff, q_poly)
+-					ringp.MulByPow2(p_poly, diff, p_poly)
+-				} else {
+-					ringq.InvMFormAndMulByPow2(q_poly, 64+diff, q_poly)
+-					ringp.InvMFormAndMulByPow2(p_poly, 64+diff, p_poly)
+-				}
+-			}
+-		}
++		export_public_key(params, &src.Value[i][0], &public_key_slice[i], level, sp_level, mf_nbits)
+ 	}
+ }
+ 
+@@ -235,13 +215,12 @@ func ExportCkksPlaintextMul(parameter_handle uint64, plaintext_mul_handle uint64
+ 	c_plaintext.is_ntt = C.bool(true)
+ 	c_plaintext.is_mform = C.bool(true)
+ 	c_plaintext.is_ringt = C.bool(false)
+-	export_polynomial(plaintext_mul.Value, &c_plaintext.poly)
+-	// Transform C memory in-place (avoids CopyNew double-copy)
++	poly := plaintext_mul.Value
+ 	if mf_nbits != 64 {
+-		comp_slice := unsafe.Slice(c_plaintext.poly.components, int(c_plaintext.poly.n_component))
+-		c_poly := wrap_c_components_as_ring_poly(comp_slice)
+-		param.RingQ().InvMFormAndMulByPow2(c_poly, mf_nbits, c_poly)
++		poly = plaintext_mul.Value.CopyNew()
++		param.RingQ().InvMFormAndMulByPow2(poly, mf_nbits, poly)
+ 	}
++	export_polynomial(poly, &c_plaintext.poly)
+ }
+ 
+ //export ExportBfvPlaintext

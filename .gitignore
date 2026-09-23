@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.deps/
+submission-build/
+io/
+datasets/
+core
+core.*
+*.log

@@ -1,0 +1,50 @@
+--- a/harness/cleartext_impl.py
++++ b/harness/cleartext_impl.py
+@@ -89,15 +89,42 @@
+     """Load ArcFace via InsightFace FaceAnalysis (detection + alignment + recognition)."""
+     from insightface.app import FaceAnalysis
+     limit_face_cpu_affinity()
+-    app = FaceAnalysis(
+-        name='buffalo_l',
+-        allowed_modules=['detection', 'recognition'],
+-        providers=['CPUExecutionProvider'],
+-    )
++    # This InsightFace version drops sess_options in get_model(). Scope the
++    # actual session-constructor override to this single-process model load.
++    import onnxruntime as ort
++    from insightface.model_zoo import model_zoo
++    original_session = model_zoo.PickableInferenceSession
++
++    class ThreadLimitedSession(original_session):
++        def __init__(self, *positional, **kwargs):
++            options = ort.SessionOptions()
++            options.intra_op_num_threads = 8
++            options.inter_op_num_threads = 1
++            kwargs['sess_options'] = options
++            super().__init__(*positional, **kwargs)
++
++    model_zoo.PickableInferenceSession = ThreadLimitedSession
++    try:
++        app = FaceAnalysis(
++            name='buffalo_l',
++            allowed_modules=['detection', 'recognition'],
++            providers=['CPUExecutionProvider'],
++        )
++    finally:
++        model_zoo.PickableInferenceSession = original_session
+     # Keep the quality reference aligned with the submission's explicit
+     # single-scale face detector. InsightFace 1.0 changed the implicit default
+     # to a 128x128 + 640x640 multi-scale pass.
+     app.prepare(ctx_id=-1, det_size=ARCFACE_DET_SIZE)
++
++    if set(app.models) != {'detection', 'recognition'}:
++        raise ValueError('Unexpected CPU reference models')
++    for model in app.models.values():
++        options = model.session.get_session_options()
++        if (options.intra_op_num_threads, options.inter_op_num_threads) != (8, 1):
++            raise ValueError('CPU reference thread limits were not applied')
++        if model.session.get_providers() != ['CPUExecutionProvider']:
++            raise ValueError('CPU reference provider changed')
+     return app
+ 
+ 

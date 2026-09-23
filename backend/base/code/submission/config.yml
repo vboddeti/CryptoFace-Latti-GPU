@@ -1,0 +1,28 @@
+cryptoface:
+  input_size: 64
+  embedding_dim: 256
+  input_names:
+    - _Split_output_0
+    - _Split_output_1
+    - _Split_output_2
+    - _Split_output_3
+  # H200 validation peaked near 129 GiB per worker. Auto-selection is
+  # intentionally stricter so only near-idle devices are claimed.
+  minimum_gpu_free_memory_mib: 140000
+  maximum_gpu_utilization_percent: 0
+  required_gpu_compute_capability: "9.0"
+
+  latti_ai_repo: "https://github.com/human-analysis/latti-ai.git"
+  latti_ai_commit: 88b4bac84b938f74e6936b19580181f97542e175
+  lattisense_repo: "https://github.com/human-analysis/lattisense.git"
+  lattisense_commit: 809b35830550370b4570c9d45ae9e33c78a97156
+  heongpu_commit: aaf76f94bfb2fca2f3b02ff63bea72fb8d4b1680
+  model_parameters_sha256: dcc3bf9c4f5a5805666b5b46d244d50d0756636a8b0000765158e912b3eaec62
+  mega_ag_sha256: ab6393f8d138dbd0b341a07dc1b96e4a697fda31087dd73c81aee3d8df029be8
+
+  security_classical_bits: 128.31868162155314
+  poly_modulus_degree: 65536
+  q_limbs: 32
+  p_limbs: 3
+  physical_bootstraps_per_image: 8
+  cuda_architecture: sm_90

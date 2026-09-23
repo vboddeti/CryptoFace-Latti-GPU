@@ -1,0 +1,70 @@
+# Build artefacts
+*/build/
+io/
+io
+third_party/
+harness/__pycache__/
+submission/**/__pycache__/
+*.pyc
+network.png
+network-with-levels.png
+
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Directories
+.DS_Store
+.idea/
+.vscode/
+.serena/
+
+# Virtual environments
+virtualenv
+.bootstrap-uv/
+.deps/
+.deps
+.cryptoface-artifact-root
+submission/native/work/
+submission/build
+
+# Datasets, queries and results since we generate them on the fly
+data/
+datasets/*
+# But keep the folder alive with this one file, since some submissions might have fixed datasets
+!datasets/.gitkeep
+# Face verification benchmark dataset is hosted on Hugging Face
+# (halmsu/celeba-1024-pairs) and downloaded on first run by generate_dataset.py.
+
+# Model checkpoint is hosted on Hugging Face (halmsu/cryptoface-v1) and
+# downloaded on first run; do not commit local copies.
+submission/checkpoints/

@@ -1,0 +1,110 @@
+{
+  "status": "validated_native_sm120_event_cache_bootstrap_lock",
+  "validated_at": "2026-07-26",
+  "security": {
+    "classical_bits": 128.31868162155314,
+    "required_bits": 128.0,
+    "limiting_attack": "bdd_mitm_hybrid",
+    "main_secret_hamming_weight": 640,
+    "ephemeral_secret_hamming_weight": 32
+  },
+  "parameters": {
+    "poly_modulus_degree": 65536,
+    "q_limbs": 32,
+    "p_limbs": 3,
+    "log_default_scale": 44,
+    "physical_bootstraps_per_image": 8
+  },
+  "source": {
+    "lattisense_commit": "fbb85da05139af3b6e164fea76ee02f98ace3442",
+    "heongpu_commit": "aaf76f94bfb2fca2f3b02ff63bea72fb8d4b1680",
+    "gpu_ntt_commit": "c6507e99e12b7cf658cda4a2dadedaad7fdee56b",
+    "gpu_fft_commit": "b743607c1173000718ca1f84016fd03093ebb6fc",
+    "rngongpu_commit": "d9aaa6b5d7cc67a2ca307ef9d6203f25cc2458b4",
+    "rngongpu_gpu_ntt_commit": "32332ce0f367b7e04612e66ae63da3812fb3b8e3",
+    "lattigo_commit": "19d1e4edc162d641ebb6b636beda08496a1a070e",
+    "runtime_sha256": "98502f81ceaf814a689260d31ec2860b9691a58599468ca3e41df4d2efc4cb6c"
+  },
+  "runtime": {
+    "cuda_architecture": "sm_120",
+    "task_streams": 4,
+    "cached_dependency_events": 47509,
+    "bootstrap_submission_lock": true,
+    "operator_submission_lock": false,
+    "gpu_key_cache": true,
+    "pinned_request_h2d": true,
+    "node0_cpuset": "0-31,64-95"
+  },
+  "single_pair": {
+    "pairs": 1,
+    "images": 2,
+    "all_finite": true,
+    "relative_l2_max": 0.020821,
+    "max_abs_max": 0.003843,
+    "processing_sec": 26.949,
+    "cold_core_sec": 12.873,
+    "hot_core_sec": 9.607
+  },
+  "fresh_release_single_pair": {
+    "pairs": 1,
+    "images": 2,
+    "all_finite": true,
+    "pass": true,
+    "relative_l2_max": 0.01886103893163494,
+    "max_abs_max": 0.003534512700899356,
+    "processing_sec": 27.52668707910925,
+    "elapsed_including_setup_sec": 428.1265962533653,
+    "throughput_images_per_sec": 0.0726567637526513
+  },
+  "clean_rebuild_pair": {
+    "runtime_sha256": "4c4fe0184213d77f80e7a9d1a3075e90b1be4397a7a47601877864688acc484e",
+    "all_finite": true,
+    "relative_l2_max": 0.019128482133625207,
+    "max_abs_max": 0.003653281134965408,
+    "processing_sec": 28.37248884793371,
+    "pass": true
+  },
+  "race_stress_64_pairs_3gpu": {
+    "pairs": 64,
+    "images": 128,
+    "all_finite": true,
+    "relative_l2_max": 0.026622,
+    "max_abs_max": 0.005568,
+    "processing_sec": 537.745,
+    "aggregate_pair_interval_sec": 8.402,
+    "hot_core_mean_sec": 10.104
+  },
+  "full_128_pairs_3gpu": {
+    "pairs": 128,
+    "images": 256,
+    "all_finite": true,
+    "relative_l2_max": 0.026827,
+    "max_abs_max": 0.006033,
+    "processing_sec": 1070.512,
+    "aggregate_pair_interval_sec": 8.363,
+    "throughput_images_per_sec": 0.2391,
+    "core_mean_sec": 10.159,
+    "hot_core_mean_sec": 10.094,
+    "peak_memory_mib": 88056
+  },
+  "fresh_release_128_pairs_3gpu": {
+    "pairs": 128,
+    "images": 256,
+    "all_finite": true,
+    "pass": true,
+    "pair_ids_match": true,
+    "labels_match": true,
+    "relative_l2_max": 0.026620799059925707,
+    "max_abs_max": 0.006787840746298654,
+    "processing_sec": 1097.9633438643068,
+    "aggregate_pair_interval_sec": 8.577838623939897,
+    "throughput_images_per_sec": 0.23315896785679768,
+    "elapsed_including_setup_sec": 1526.8596104718745,
+    "gpu_memory_released_after_exit": true
+  },
+  "thresholds": {
+    "relative_l2_max": 0.03,
+    "max_abs_max": 0.01,
+    "all_embeddings_finite": true
+  }
+}

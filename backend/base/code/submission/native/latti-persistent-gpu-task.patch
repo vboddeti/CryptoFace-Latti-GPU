@@ -1,0 +1,53 @@
+diff --git a/inference/inference_task/inference_process.h b/inference/inference_task/inference_process.h
+--- a/inference/inference_task/inference_process.h
++++ b/inference/inference_task/inference_process.h
+@@ -18,10 +18,16 @@
+ 
+ #pragma once
+ 
++#include <memory>
++
+ #include <hdf5.h>
+ 
+ #include "util.h"
+ #include "fhe_layers/fhe_layers.h"
+ 
++namespace lattisense {
++class FheTaskGpu;
++}
++
+ namespace ls = cxx_sdk_v2;
+ 
+ enum class ComputeDevice { CPU, GPU, FPGA };
+@@ -226,6 +232,14 @@ public:
+     std::vector<std::string> available_keys;
+     std::map<std::string, Array1D> p_feature0d_x;
+ 
++    // One InferenceProcess belongs to one persistent native server worker.
++    // Keeping the parsed GPU task alive here preserves its task-scoped GPU
++    // context, evaluation-key cache, and dependency-event cache across image
++    // requests. The backend invalidates cached state if the FHE context or
++    // CUDA device changes.
++    std::unique_ptr<lattisense::FheTaskGpu> gpu_task;
++
+     void run_task(bool is_mpc = false);
+     void run_task_sdk(bool is_mpc = false);
+     void run_task_plaintext(bool is_mpc = false);
+diff --git a/inference/inference_task/inference_process.cpp b/inference/inference_task/inference_process.cpp
+--- a/inference/inference_task/inference_process.cpp
++++ b/inference/inference_task/inference_process.cpp
+@@ -1307,8 +1307,13 @@ void InferenceProcess::run_task(bool is_mpc) {
+ #ifdef INFERENCE_SDK_ENABLE_GPU
+         case ComputeDevice::GPU: {
+-            auto task = make_unique<FheTaskGpu>(fp->project_path);
+-            fhe_time = fhe_time + task->run(ckks_contexts.at(context_id).get(), cxx_args, nullptr, gpu_device);
++            if (!gpu_task) {
++                gpu_task = make_unique<FheTaskGpu>(fp->project_path);
++                cout << "[InferenceProcess] Created persistent GPU task for device "
++                     << gpu_device << endl;
++            }
++            fhe_time = fhe_time +
++                       gpu_task->run(ckks_contexts.at(context_id).get(), cxx_args, nullptr, gpu_device);
+             break;
+         }
+ #else

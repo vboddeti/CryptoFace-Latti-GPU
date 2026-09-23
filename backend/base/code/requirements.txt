@@ -1,0 +1,11 @@
+# Harness and client-side face preprocessing dependencies.
+numpy==2.2.6
+torch==2.13.0
+pyyaml==6.0.3
+opencv-python-headless==5.0.0.93
+insightface==0.7.3
+h5py==3.16.0
+pillow==12.3.0
+onnxruntime==1.24.3
+huggingface_hub>=0.24
+scikit-learn>=1.5

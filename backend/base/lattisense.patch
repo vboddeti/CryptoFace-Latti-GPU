@@ -1,0 +1,1681 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ce7693d..b76c21b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -107,10 +107,12 @@ if(LATTISENSE_ENABLE_GPU)
+     set(HEONGPU_INSTALL_DIR "${HEONGPU_SOURCE_DIR}/install")
+     set(HEONGPU_CACHE_MARKER ".heongpu_cache_key")
+ 
++    # HEONGPU_CACHE_KEY_FORCE_ROTATION_SUFFIX_STREAMS_V1
+     set(HEONGPU_SOURCE_REVISION
+-        "aaf76f94bfb2fca2f3b02ff63bea72fb8d4b1680"
++        "aaf76f94bfb2fca2f3b02ff63bea72fb8d4b1680-checked-converted-plaintext-v2"
+         CACHE STRING
+         "Vendored HEonGPU source revision used for build-cache validation"
++        FORCE
+     )
+     set(HEONGPU_COMMIT "${HEONGPU_SOURCE_REVISION}")
+     if(HEONGPU_COMMIT STREQUAL "")
+diff --git a/backends/HEonGPU/src/include/heongpu/host/ckks/operator.cuh b/backends/HEonGPU/src/include/heongpu/host/ckks/operator.cuh
+index c34a0c7..1971808 100644
+--- a/backends/HEonGPU/src/include/heongpu/host/ckks/operator.cuh
++++ b/backends/HEonGPU/src/include/heongpu/host/ckks/operator.cuh
+@@ -1240,6 +1240,98 @@ namespace heongpu
+                 options, (&input1 == &output));
+         }
+ 
++        /**
++         * Rotates one ciphertext by several direct Galois elements while
++         * sharing the method-II decomposition of the input. Outputs and
++         * shifts have a one-to-one correspondence and outputs must not alias
++         * the input or each other.
++         */
++        __host__ void rotate_rows_many(
++            Ciphertext<Scheme::CKKS>& input1,
++            const std::vector<Ciphertext<Scheme::CKKS>*>& outputs,
++            Galoiskey<Scheme::CKKS>& galois_key,
++            const std::vector<int>& shifts,
++            const ExecutionOptions& options = ExecutionOptions())
++        {
++            if (outputs.size() != shifts.size())
++            {
++                throw std::invalid_argument(
++                    "Rotation outputs and shifts must have the same size!");
++            }
++            if (outputs.empty())
++            {
++                return;
++            }
++            if (input1.relinearization_required_)
++            {
++                throw std::invalid_argument("Ciphertext can not be rotated!");
++            }
++
++            int current_decomp_count = context_->Q_size - input1.depth_;
++            if (input1.memory_size() < (2 * context_->n * current_decomp_count))
++            {
++                throw std::invalid_argument("Invalid Ciphertexts size!");
++            }
++            for (std::size_t i = 0; i < outputs.size(); ++i)
++            {
++                if (outputs[i] == nullptr || outputs[i] == &input1)
++                {
++                    throw std::invalid_argument(
++                        "Batched rotation outputs must be distinct objects!");
++                }
++                for (std::size_t j = 0; j < i; ++j)
++                {
++                    if (outputs[i] == outputs[j])
++                    {
++                        throw std::invalid_argument(
++                            "Batched rotation outputs must be distinct objects!");
++                    }
++                }
++            }
++
++            input_storage_manager(
++                input1,
++                [&](Ciphertext<Scheme::CKKS>& input1_)
++                {
++                    switch (static_cast<int>(galois_key.key_type))
++                    {
++                        case 2: // KEYSWITCHING_METHOD_II
++                            rotate_ckks_method_II_many(
++                                input1_, outputs, galois_key, shifts,
++                                options.stream_);
++                            break;
++                        default:
++                            // Method I is not used by the CryptoFace H200
++                            // context. Preserve correctness for other contexts
++                            // without claiming a hoisting benefit.
++                            for (std::size_t i = 0; i < outputs.size(); ++i)
++                            {
++                                rotate_ckks_method_I(input1_, *outputs[i],
++                                                     galois_key, shifts[i],
++                                                     options.stream_);
++                            }
++                            break;
++                    }
++                },
++                options, false);
++
++            for (auto* output : outputs)
++            {
++                if (options.storage_ == storage_type::DEVICE)
++                {
++                    output->store_in_device(options.stream_);
++                }
++                else if (options.storage_ == storage_type::HOST)
++                {
++                    output->store_in_host(options.stream_);
++                }
++                else
++                {
++                    throw std::invalid_argument("Invalid storage type!");
++                }
++            }
++        }
++
+         /**
+          * @brief Rotates the rows of a ciphertext in-place by a given shift
+          * value, modifying the input ciphertext.
+@@ -1736,6 +1828,12 @@ namespace heongpu
+         }
+ 
+         HEOperator() = default;
++        // Out-of-place, level-specific conversion. Caller owns lifetime and
++        // must wait for stream completion before publishing to other streams.
++        static __host__ void prepare_ringt_plaintext(
++            HEContext<Scheme::CKKS> context, Plaintext<Scheme::CKKS>& raw,
++            Plaintext<Scheme::CKKS>& result, cudaStream_t stream);
++
+         HEOperator(const HEOperator& copy) = default;
+         HEOperator(HEOperator&& source) = default;
+         HEOperator& operator=(const HEOperator& assign) = default;
+@@ -1849,6 +1947,13 @@ namespace heongpu
+                                             int shift,
+                                             const cudaStream_t stream);
+ 
++        __host__ void rotate_ckks_method_II_many(
++            Ciphertext<Scheme::CKKS>& input1,
++            const std::vector<Ciphertext<Scheme::CKKS>*>& outputs,
++            Galoiskey<Scheme::CKKS>& galois_key,
++            const std::vector<int>& shifts,
++            const cudaStream_t stream);
++
+         ///////////////////////////////////////////////////
+ 
+         // TODO: Merge with rotation, provide code integrity
+diff --git a/backends/HEonGPU/src/lib/host/ckks/operator.cu b/backends/HEonGPU/src/lib/host/ckks/operator.cu
+index 9b28f2e..85512aa 100644
+--- a/backends/HEonGPU/src/lib/host/ckks/operator.cu
++++ b/backends/HEonGPU/src/lib/host/ckks/operator.cu
+@@ -5,11 +5,81 @@
+ 
+ #include <NTL/ZZ.h>
+ #include <NTL/RR.h>
++#include <algorithm>
++#include <cstdlib>
+ #include <heongpu/host/ckks/operator.cuh>
+ #include <heongpu/host/ckks/cosine_approx.cuh>
+ 
+ namespace heongpu
+ {
++
++    __host__ void HEOperator<Scheme::CKKS>::prepare_ringt_plaintext(
++        HEContext<Scheme::CKKS> context, Plaintext<Scheme::CKKS>& raw,
++        Plaintext<Scheme::CKKS>& result, cudaStream_t stream)
++    {
++        const int count = result.level() + 1;
++        if (!raw.is_ringt_ || result.is_ringt_ || count < 1 ||
++            count > context->Q_size || raw.size() != context->n ||
++            result.size() != context->n * count)
++            throw std::invalid_argument("Invalid RingT conversion cache operands");
++        ringt_to_pt_kernel<<<dim3((context->n >> 8), count, 1), 256, 0, stream>>>(
++            raw.data(), result.data(), context->modulus_->data(), context->n_power);
++        HEONGPU_CUDA_CHECK(cudaGetLastError());
++        gpuntt::ntt_rns_configuration<Data64> cfg = {
++            .n_power = context->n_power,
++            .ntt_type = gpuntt::FORWARD,
++            .ntt_layout = gpuntt::PerPolynomial,
++            .reduction_poly = gpuntt::ReductionPolynomial::X_N_plus,
++            .zero_padding = false,
++            .stream = stream};
++        gpuntt::GPU_NTT_Inplace(
++            result.data(), context->ntt_table_->data(), context->modulus_->data(),
++            cfg, count, count);
++        HEONGPU_CUDA_CHECK(cudaGetLastError());
++        result.scale_ = raw.scale_;
++        result.encoding_ = raw.encoding_;
++        result.in_ntt_domain_ = true;
++    }
++}
++
++namespace heongpu
++{
++    namespace
++    {
++        class RotationSuffixStreamPool
++        {
++          public:
++            ~RotationSuffixStreamPool()
++            {
++                for (cudaStream_t stream : streams_)
++                {
++                    cudaStreamSynchronize(stream);
++                    cudaStreamDestroy(stream);
++                }
++            }
++
++            void ensure_size(std::size_t count)
++            {
++                while (streams_.size() < count)
++                {
++                    cudaStream_t stream;
++                    HEONGPU_CUDA_CHECK(cudaStreamCreate(&stream));
++                    streams_.push_back(stream);
++                }
++            }
++
++            cudaStream_t operator[](std::size_t index) const
++            {
++                return streams_[index];
++            }
++
++          private:
++            std::vector<cudaStream_t> streams_;
++        };
++
++        thread_local RotationSuffixStreamPool rotation_suffix_stream_pool;
++    } // namespace
++
+     __host__
+     HEOperator<Scheme::CKKS>::HEOperator(HEContext<Scheme::CKKS> context,
+                                          HEEncoder<Scheme::CKKS>& encoder)
+@@ -2023,6 +2093,296 @@ namespace heongpu
+         output.ciphertext_generated_ = true;
+     }
+ 
++    __host__ void HEOperator<Scheme::CKKS>::rotate_ckks_method_II_many(
++        Ciphertext<Scheme::CKKS>& input1,
++        const std::vector<Ciphertext<Scheme::CKKS>*>& outputs,
++        Galoiskey<Scheme::CKKS>& galois_key,
++        const std::vector<int>& shifts, const cudaStream_t stream)
++    {
++        const char* suffix_stream_env =
++            std::getenv("HEONGPU_ROTATE_MANY_SUFFIX_STREAMS");
++        int requested_suffix_streams =
++            suffix_stream_env == nullptr ? 1 : std::atoi(suffix_stream_env);
++        requested_suffix_streams =
++            std::max(1, std::min(requested_suffix_streams, 4));
++        const std::size_t nonzero_rotation_count =
++            static_cast<std::size_t>(std::count_if(
++                shifts.begin(), shifts.end(), [](int shift)
++                { return shift != 0; }));
++        const int suffix_stream_count = static_cast<int>(std::min(
++            nonzero_rotation_count,
++            static_cast<std::size_t>(requested_suffix_streams)));
++        const bool parallel_suffixes = suffix_stream_count > 1;
++
++        int first_rns_mod_count = context_->Q_prime_size;
++        int current_rns_mod_count = context_->Q_prime_size - input1.depth_;
++
++        int first_decomp_count = context_->Q_size;
++        int current_decomp_count = context_->Q_size - input1.depth_;
++
++        // temp0 and temp3 are the expensive input-dependent decomposition.
++        // Serial execution reuses one temp4. Parallel suffix execution gives
++        // each suffix stream its own temp4 workspace.
++        const std::size_t temp4_size =
++            2 * context_->n * context_->Q_prime_size;
++        DeviceVector<Data64> temp_rotation(
++            (2 * context_->n * context_->Q_size) +
++                (2 * context_->n * context_->Q_size) +
++                (context_->n * context_->Q_size) +
++                (2 * context_->n * context_->d_leveled->operator[](0) *
++                 context_->Q_prime_size) +
++                (parallel_suffixes ? 0 : temp4_size),
++            stream);
++
++        Data64* temp0_rotation = temp_rotation.data();
++        Data64* temp1_rotation =
++            temp0_rotation + (2 * context_->n * context_->Q_size);
++        Data64* temp2_rotation =
++            temp1_rotation + (2 * context_->n * context_->Q_size);
++        Data64* temp3_rotation =
++            temp2_rotation + (context_->n * context_->Q_size);
++        Data64* serial_temp4_rotation =
++            parallel_suffixes
++                ? nullptr
++                : temp3_rotation +
++                      (2 * context_->n *
++                       context_->d_leveled->operator[](0) *
++                       context_->Q_prime_size);
++
++        gpuntt::ntt_rns_configuration<Data64> cfg_intt = {
++            .n_power = context_->n_power,
++            .ntt_type = gpuntt::INVERSE,
++            .ntt_layout = gpuntt::PerPolynomial,
++            .reduction_poly = gpuntt::ReductionPolynomial::X_N_plus,
++            .zero_padding = false,
++            .mod_inverse = context_->n_inverse_->data(),
++            .stream = stream};
++
++        gpuntt::GPU_INTT(input1.data(), temp0_rotation,
++                         context_->intt_table_->data(),
++                         context_->modulus_->data(), cfg_intt,
++                         2 * current_decomp_count, current_decomp_count);
++
++        gpuntt::ntt_rns_configuration<Data64> cfg_ntt = {
++            .n_power = context_->n_power,
++            .ntt_type = gpuntt::FORWARD,
++            .ntt_layout = gpuntt::PerPolynomial,
++            .reduction_poly = gpuntt::ReductionPolynomial::X_N_plus,
++            .zero_padding = false,
++            .stream = stream};
++
++        int counter = first_rns_mod_count;
++        int location = 0;
++        for (int i = 0; i < input1.depth_; i++)
++        {
++            location += counter;
++            counter--;
++        }
++
++        base_conversion_DtoQtilde_relin_leveled_kernel<<<
++            dim3((context_->n >> 8),
++                 context_->d_leveled->operator[](input1.depth_), 1),
++            256, 0, stream>>>(
++            temp0_rotation + (current_decomp_count << context_->n_power),
++            temp3_rotation, context_->modulus_->data(),
++            context_->base_change_matrix_D_to_Qtilda_leveled
++                ->operator[](input1.depth_)
++                .data(),
++            context_->Mi_inv_D_to_Qtilda_leveled->operator[](input1.depth_)
++                .data(),
++            context_->prod_D_to_Qtilda_leveled->operator[](input1.depth_)
++                .data(),
++            context_->I_j_leveled->operator[](input1.depth_).data(),
++            context_->I_location_leveled->operator[](input1.depth_).data(),
++            context_->n_power, context_->d_leveled->operator[](input1.depth_),
++            current_rns_mod_count, current_decomp_count, input1.depth_,
++            context_->prime_location_leveled->data() + location);
++        HEONGPU_CUDA_CHECK(cudaGetLastError());
++
++        gpuntt::GPU_NTT_Modulus_Ordered_Inplace(
++            temp3_rotation, context_->ntt_table_->data(),
++            context_->modulus_->data(), cfg_ntt,
++            context_->d_leveled->operator[](input1.depth_) *
++                current_rns_mod_count,
++            current_rns_mod_count, new_prime_locations + location);
++
++        int iteration_count_1 =
++            context_->d_leveled->operator[](input1.depth_) / 4;
++        int iteration_count_2 =
++            context_->d_leveled->operator[](input1.depth_) % 4;
++
++        struct SuffixStreamResources
++        {
++            cudaEvent_t common_ready = nullptr;
++            std::vector<cudaEvent_t> completed;
++
++            ~SuffixStreamResources()
++            {
++                for (cudaEvent_t event : completed)
++                {
++                    cudaEventDestroy(event);
++                }
++                if (common_ready != nullptr)
++                {
++                    cudaEventDestroy(common_ready);
++                }
++            }
++        } suffix_resources;
++        std::vector<DeviceVector<Data64>> parallel_temp4;
++
++        if (parallel_suffixes)
++        {
++            HEONGPU_CUDA_CHECK(cudaEventCreateWithFlags(
++                &suffix_resources.common_ready, cudaEventDisableTiming));
++            HEONGPU_CUDA_CHECK(
++                cudaEventRecord(suffix_resources.common_ready, stream));
++            rotation_suffix_stream_pool.ensure_size(suffix_stream_count);
++            suffix_resources.completed.reserve(suffix_stream_count);
++            parallel_temp4.reserve(suffix_stream_count);
++            for (int lane = 0; lane < suffix_stream_count; ++lane)
++            {
++                cudaEvent_t completed;
++                const cudaStream_t suffix_stream =
++                    rotation_suffix_stream_pool[lane];
++                HEONGPU_CUDA_CHECK(cudaEventCreateWithFlags(
++                    &completed, cudaEventDisableTiming));
++                HEONGPU_CUDA_CHECK(cudaStreamWaitEvent(
++                    suffix_stream, suffix_resources.common_ready, 0));
++                suffix_resources.completed.push_back(completed);
++                parallel_temp4.emplace_back(temp4_size, suffix_stream);
++            }
++        }
++
++        std::size_t nonzero_rotation_index = 0;
++        for (std::size_t rotation_index = 0;
++             rotation_index < shifts.size(); ++rotation_index)
++        {
++            Ciphertext<Scheme::CKKS>& output = *outputs[rotation_index];
++            if (shifts[rotation_index] == 0)
++            {
++                output = input1;
++                continue;
++            }
++
++            const int lane =
++                parallel_suffixes
++                    ? static_cast<int>(nonzero_rotation_index %
++                                       suffix_stream_count)
++                    : 0;
++            ++nonzero_rotation_index;
++            const cudaStream_t rotation_stream =
++                parallel_suffixes ? rotation_suffix_stream_pool[lane] : stream;
++            Data64* temp4_rotation =
++                parallel_suffixes ? parallel_temp4[lane].data()
++                                  : serial_temp4_rotation;
++            auto rotation_cfg_intt = cfg_intt;
++            auto rotation_cfg_ntt = cfg_ntt;
++            rotation_cfg_intt.stream = rotation_stream;
++            rotation_cfg_ntt.stream = rotation_stream;
++
++            int galois_elt = steps_to_galois_elt(
++                shifts[rotation_index], context_->n, galois_key.group_order_);
++            bool key_exist =
++                (galois_key.storage_type_ == storage_type::DEVICE)
++                    ? (galois_key.device_location_.find(galois_elt) !=
++                       galois_key.device_location_.end())
++                    : (galois_key.host_location_.find(galois_elt) !=
++                       galois_key.host_location_.end());
++            if (!key_exist)
++            {
++                throw std::logic_error("Galois key not present!");
++            }
++
++            DeviceVector<Data64> output_memory(
++                (2 * context_->n * current_decomp_count), rotation_stream);
++
++            if (galois_key.storage_type_ == storage_type::DEVICE)
++            {
++                keyswitch_multiply_accumulate_leveled_method_II_kernel<<<
++                    dim3((context_->n >> 8), current_rns_mod_count, 1), 256,
++                    0, rotation_stream>>>(
++                    temp3_rotation,
++                    galois_key.device_location_[galois_elt].data(),
++                    temp4_rotation, context_->modulus_->data(),
++                    first_rns_mod_count, current_decomp_count,
++                    current_rns_mod_count, iteration_count_1,
++                    iteration_count_2, input1.depth_, context_->n_power);
++                HEONGPU_CUDA_CHECK(cudaGetLastError());
++            }
++            else
++            {
++                DeviceVector<Data64> key_location(
++                    galois_key.host_location_[galois_elt], rotation_stream);
++                keyswitch_multiply_accumulate_leveled_method_II_kernel<<<
++                    dim3((context_->n >> 8), current_rns_mod_count, 1), 256,
++                    0, rotation_stream>>>(
++                    temp3_rotation, key_location.data(), temp4_rotation,
++                    context_->modulus_->data(), first_rns_mod_count,
++                    current_decomp_count, current_rns_mod_count,
++                    iteration_count_1, iteration_count_2, input1.depth_,
++                    context_->n_power);
++                HEONGPU_CUDA_CHECK(cudaGetLastError());
++            }
++
++            gpuntt::GPU_NTT_Modulus_Ordered_Inplace(
++                temp4_rotation, context_->intt_table_->data(),
++                context_->modulus_->data(), rotation_cfg_intt,
++                2 * current_rns_mod_count, current_rns_mod_count,
++                new_prime_locations + location);
++
++            divide_round_lastq_permute_ckks_kernel<<<
++                dim3((context_->n >> 8), current_decomp_count, 2), 256, 0,
++                rotation_stream>>>(
++                temp4_rotation, temp0_rotation, output_memory.data(),
++                context_->modulus_->data(), context_->half_p_->data(),
++                context_->half_mod_->data(),
++                context_->last_q_modinv_->data(), galois_elt,
++                context_->n_power, current_rns_mod_count,
++                current_decomp_count, first_rns_mod_count,
++                first_decomp_count, context_->P_size);
++            HEONGPU_CUDA_CHECK(cudaGetLastError());
++
++            gpuntt::GPU_NTT_Inplace(
++                output_memory.data(), context_->ntt_table_->data(),
++                context_->modulus_->data(), rotation_cfg_ntt,
++                2 * current_decomp_count, current_decomp_count);
++
++            output.memory_set(std::move(output_memory));
++            output.scheme_ = context_->scheme_;
++            output.ring_size_ = context_->n;
++            output.coeff_modulus_count_ = context_->Q_size;
++            output.cipher_size_ = 2;
++            output.depth_ = input1.depth_;
++            output.scale_ = input1.scale_;
++            output.in_ntt_domain_ = input1.in_ntt_domain_;
++            output.encoding_ = input1.encoding_;
++            output.rescale_required_ = input1.rescale_required_;
++            output.relinearization_required_ =
++                input1.relinearization_required_;
++            output.ciphertext_generated_ = true;
++        }
++
++        if (parallel_suffixes)
++        {
++            for (int lane = 0; lane < suffix_stream_count; ++lane)
++            {
++                HEONGPU_CUDA_CHECK(cudaEventRecord(
++                    suffix_resources.completed[lane],
++                    rotation_suffix_stream_pool[lane]));
++                HEONGPU_CUDA_CHECK(cudaStreamWaitEvent(
++                    stream, suffix_resources.completed[lane], 0));
++            }
++            for (std::size_t rotation_index = 0;
++                 rotation_index < shifts.size(); ++rotation_index)
++            {
++                if (shifts[rotation_index] != 0)
++                {
++                    outputs[rotation_index]->switch_stream(stream);
++                }
++            }
++        }
++    }
++
+     __host__ void HEOperator<Scheme::CKKS>::switchkey_ckks_method_I(
+         Ciphertext<Scheme::CKKS>& input1, Ciphertext<Scheme::CKKS>& output,
+         Switchkey<Scheme::CKKS>& switch_key, const cudaStream_t stream)
+diff --git a/cxx_sdk_v2/cxx_abi_bridge_executors.h b/cxx_sdk_v2/cxx_abi_bridge_executors.h
+index f4c3199..244c009 100644
+--- a/cxx_sdk_v2/cxx_abi_bridge_executors.h
++++ b/cxx_sdk_v2/cxx_abi_bridge_executors.h
+@@ -41,6 +41,8 @@
+ #include "../mega_ag_runners/mega_ag.h"
+ #include "../fhe_ops_lib/fhe_lib_v2.h"
+ #include "cxx_argument.h"
++#include "key_export_profile.h"
++#include "scoped_key_export_cache.h"
+ #include <atomic>
+ #include <cerrno>
+ #include <cstdio>
+@@ -303,7 +305,8 @@ inline ExecutorFunc create_abi_export_executor(Algo algorithm,
+                                                bool heterogeneous_mode = true,
+                                                int mf_nbits = 64,
+                                                int key_mf_nbits = 64,
+-                                               bool preconvert_ringt = false) {
++                                               bool preconvert_ringt = false,
++                                               std::shared_ptr<cryptoface::ScopedKeyExportCache> host_key_cache = {}) {
+     auto immutable_cache = std::make_shared<ImmutableAbiExportCache>();
+     if (algorithm == Algo::ALGO_BFV) {
+         return [heterogeneous_mode, mf_nbits, key_mf_nbits](ExecutionContext& ctx,
+@@ -446,7 +449,7 @@ inline ExecutorFunc create_abi_export_executor(Algo algorithm,
+             }
+         };
+     } else if (algorithm == Algo::ALGO_CKKS) {
+-        return [mf_nbits, key_mf_nbits, heterogeneous_mode, preconvert_ringt, immutable_cache](ExecutionContext& ctx,
++        return [mf_nbits, key_mf_nbits, heterogeneous_mode, preconvert_ringt, immutable_cache, host_key_cache](ExecutionContext& ctx,
+                                                             const std::unordered_map<NodeIndex, std::any>& inputs,
+                                                             std::any& output, const ComputeNode& self) -> void {
+             const DatumNode* input_node = self.input_nodes[0];
+@@ -590,6 +593,15 @@ inline ExecutorFunc create_abi_export_executor(Algo algorithm,
+                     if (!heterogeneous_mode)
+                         break;
+                     RelinKey* rlk = static_cast<RelinKey*>(input_ptr.get());
++                    const cryptoface::KeyExportMetadata host_key{cryptoface::KeyKind::Relin,
++                        level, sp_level, key_mf_nbits, 0, input_node->index};
++                    const bool reuse_host_key = host_key_cache && host_key_cache->enabled();
++                    if (reuse_host_key) {
++                        if (auto cached = host_key_cache->find<CRelinKey>(host_key)) {
++                            output = cached;
++                            break;
++                        }
++                    }
+                     ImmutableAbiExportCacheKey cache_key{param.get(), rlk->get(), data_type, level, sp_level,
+                                                          key_mf_nbits, 0, false, false, false};
+                     if (auto cached = immutable_cache->find<CRelinKey>(cache_key)) {
+@@ -597,12 +609,16 @@ inline ExecutorFunc create_abi_export_executor(Algo algorithm,
+                         break;
+                     }
+                     CRelinKey* c_rlk = (CRelinKey*)malloc(sizeof(CRelinKey));
++                    KeyExportProfile profile("relin", param.get(), rlk->get(), level, sp_level, key_mf_nbits, 0);
+                     export_ckks_relin_key(param.get(), rlk->get(), level, key_mf_nbits, c_rlk);
++                    profile.finish(abi_switching_key_bytes(*c_rlk));
+                     auto exported = std::shared_ptr<CRelinKey>(c_rlk, [](CRelinKey* p) {
+                         free_relin_key(p);
+                         free(p);
+                     });
+-                    output = immutable_cache->insert_or_get(cache_key, exported, abi_switching_key_bytes(*c_rlk));
++                    output = reuse_host_key ?
++                        host_key_cache->admit(host_key, exported, abi_switching_key_bytes(*c_rlk)) :
++                        immutable_cache->insert_or_get(cache_key, exported, abi_switching_key_bytes(*c_rlk));
+                     break;
+                 }
+ 
+@@ -612,6 +628,15 @@ inline ExecutorFunc create_abi_export_executor(Algo algorithm,
+                     uint64_t galois_element =
+                         input_node->fhe_prop->p.has_value() ? input_node->fhe_prop->p->galois_element : 0;
+                     GaloisKey* glk = static_cast<GaloisKey*>(input_ptr.get());
++                    const cryptoface::KeyExportMetadata host_key{cryptoface::KeyKind::Galois,
++                        level, sp_level, key_mf_nbits, galois_element, input_node->index};
++                    const bool reuse_host_key = host_key_cache && host_key_cache->enabled();
++                    if (reuse_host_key) {
++                        if (auto cached = host_key_cache->find<CGaloisKey>(host_key)) {
++                            output = cached;
++                            break;
++                        }
++                    }
+                     ImmutableAbiExportCacheKey cache_key{param.get(), glk->get(), data_type, level, sp_level,
+                                                          key_mf_nbits, static_cast<uint32_t>(galois_element),
+                                                          false, false, false};
+@@ -621,12 +646,16 @@ inline ExecutorFunc create_abi_export_executor(Algo algorithm,
+                     }
+                     CGaloisKey* c_glk = (CGaloisKey*)malloc(sizeof(CGaloisKey));
+                     set_galois_key_steps(c_glk, &galois_element, 1);
++                    KeyExportProfile profile("galois", param.get(), glk->get(), level, sp_level, key_mf_nbits, galois_element);
+                     export_ckks_galois_key(param.get(), glk->get(), level, key_mf_nbits, c_glk);
++                    profile.finish(abi_galois_key_bytes(*c_glk));
+                     auto exported = std::shared_ptr<CGaloisKey>(c_glk, [](CGaloisKey* p) {
+                         free_galois_key(p);
+                         free(p);
+                     });
+-                    output = immutable_cache->insert_or_get(cache_key, exported, abi_galois_key_bytes(*c_glk));
++                    output = reuse_host_key ?
++                        host_key_cache->admit(host_key, exported, abi_galois_key_bytes(*c_glk)) :
++                        immutable_cache->insert_or_get(cache_key, exported, abi_galois_key_bytes(*c_glk));
+                     break;
+                 }
+ 
+@@ -634,6 +663,15 @@ inline ExecutorFunc create_abi_export_executor(Algo algorithm,
+                     if (!heterogeneous_mode)
+                         break;
+                     KeySwitchKey* swk = static_cast<KeySwitchKey*>(input_ptr.get());
++                    const cryptoface::KeyExportMetadata host_key{cryptoface::KeyKind::Switch,
++                        level, sp_level, key_mf_nbits, 0, input_node->index};
++                    const bool reuse_host_key = host_key_cache && host_key_cache->enabled();
++                    if (reuse_host_key) {
++                        if (auto cached = host_key_cache->find<CKeySwitchKey>(host_key)) {
++                            output = cached;
++                            break;
++                        }
++                    }
+                     ImmutableAbiExportCacheKey cache_key{param.get(), swk->get(), data_type, level, sp_level,
+                                                          key_mf_nbits, 0, false, false, false};
+                     if (auto cached = immutable_cache->find<CKeySwitchKey>(cache_key)) {
+@@ -641,13 +679,16 @@ inline ExecutorFunc create_abi_export_executor(Algo algorithm,
+                         break;
+                     }
+                     CKeySwitchKey* c_swk = (CKeySwitchKey*)malloc(sizeof(CKeySwitchKey));
++                    KeyExportProfile profile("switch", param.get(), swk->get(), level, sp_level, key_mf_nbits, 0);
+                     export_ckks_switching_key(param.get(), swk->get(), level, sp_level, key_mf_nbits, c_swk);
++                    profile.finish(abi_switching_key_bytes(*c_swk));
+                     auto exported = std::shared_ptr<CKeySwitchKey>(c_swk, [](CKeySwitchKey* p) {
+                         free_relin_key(p);  // CKeySwitchKey is typedef of CRelinKey
+                         free(p);
+                     });
+-                    output = immutable_cache->insert_or_get(cache_key, exported,
+-                                                            abi_switching_key_bytes(*c_swk));
++                    output = reuse_host_key ?
++                        host_key_cache->admit(host_key, exported, abi_switching_key_bytes(*c_swk)) :
++                        immutable_cache->insert_or_get(cache_key, exported, abi_switching_key_bytes(*c_swk));
+                     break;
+                 }
+ 
+diff --git a/cxx_sdk_v2/cxx_fhe_task.h b/cxx_sdk_v2/cxx_fhe_task.h
+index 86028ae..b921cf0 100644
+--- a/cxx_sdk_v2/cxx_fhe_task.h
++++ b/cxx_sdk_v2/cxx_fhe_task.h
+@@ -30,6 +30,7 @@ extern "C" {
+ 
+ #include "../mega_ag_runners/mega_ag.h"
+ #include "cxx_argument.h"
++#include "scoped_key_export_cache.h"
+ #include "check_sig.h"
+ 
+ namespace lattisense {
+@@ -136,6 +137,9 @@ public:
+     FheTaskGpu(const std::string& project_path);
+ 
+     ~FheTaskGpu();
++    // Before in-place key replacement, invalidate both host and device reuse.
++    // The enabled experiment otherwise requires immutable evaluation keys.
++    void invalidate_immutable_key_cache();
+ 
+     void bind_custom_executors(const std::unordered_map<std::string, ExecutorFunc>& custom_executors) override;
+     uint64_t run(FheContext* context,
+@@ -144,6 +148,7 @@ public:
+                  int gpu_device = 0);
+ 
+ protected:
++    std::shared_ptr<cryptoface::ScopedKeyExportCache> _host_key_export_cache;
+     void bind_abi_executors() override;
+ };
+ 
+diff --git a/cxx_sdk_v2/cxx_fhe_task_gpu.cpp b/cxx_sdk_v2/cxx_fhe_task_gpu.cpp
+index 11d8588..4b7d2c2 100644
+--- a/cxx_sdk_v2/cxx_fhe_task_gpu.cpp
++++ b/cxx_sdk_v2/cxx_fhe_task_gpu.cpp
+@@ -58,11 +58,25 @@ FheTaskGpu::~FheTaskGpu() {
+     release_fhe_gpu_task(task_handle);
+ }
+ 
++void FheTaskGpu::invalidate_immutable_key_cache() {
++    _host_key_export_cache->invalidate();
++}
++
+ void FheTaskGpu::bind_abi_executors() {
++    uint64_t host_key_cap = 0;
++    if (const char* raw = std::getenv("LATTISENSE_GPU_HOST_KEY_CACHE_MAX_BYTES")) {
++        const std::string value(raw);
++        if (value.empty() || value.find_first_not_of("0123456789") != std::string::npos)
++            throw std::invalid_argument("Invalid host key cache byte limit");
++        host_key_cap = std::stoull(value);
++    }
++    if (host_key_cap && _algo != Algo::ALGO_CKKS)
++        throw std::invalid_argument("Host key cache currently supports CKKS only");
++    _host_key_export_cache = std::make_shared<cryptoface::ScopedKeyExportCache>(host_key_cap);
+     // Create ABI export executor (Handle → c_struct, for pre-allocation)
+     ExecutorFunc abi_export =
+         create_abi_export_executor(
+-            _algo, true, GPU_PLAINTEXT_MFORM_BITS, GPU_KEY_MFORM_BITS, false);
++            _algo, true, GPU_PLAINTEXT_MFORM_BITS, GPU_KEY_MFORM_BITS, false, _host_key_export_cache);
+ 
+     // Create ABI import executor (c_struct → Handle, for intermediate data and output write-back)
+     ExecutorFunc abi_import = create_abi_import_executor(_algo, true);
+@@ -102,6 +116,15 @@ uint64_t FheTaskGpu::run(FheContext* context,
+ 
+     // Check parameter
+     check_parameter(context, _param_json);
++    const bool reuse_host_keys = _host_key_export_cache->enabled();
++    const char* immutable_flag = std::getenv("LATTISENSE_GPU_IMMUTABLE_EVAL_KEYS");
++    const bool immutable_contract = immutable_flag && std::string(immutable_flag) == "1";
++    cryptoface::KeyContextIdentity host_identity{};
++    if (reuse_host_keys) {
++        host_identity = {reinterpret_cast<uintptr_t>(context), context->get(), 0, _param_json.dump()};
++    }
++    auto host_key_request = _host_key_export_cache->begin(host_identity, immutable_contract);
++    const auto host_key_before = _host_key_export_cache->stats();
+     print_gpu_task_elapsed("parameter check", phase_start);
+     phase_start = SteadyClock::now();
+ 
+@@ -136,7 +159,8 @@ uint64_t FheTaskGpu::run(FheContext* context,
+         std::cout << "[GPU Task] run_fhe_gpu_task begin: inputs=" << input_args.size()
+                   << " outputs=" << output_args.size() << " gpu=" << gpu_device << std::endl;
+     }
+-    const uint64_t evaluation_context_identity = reinterpret_cast<uint64_t>(context);
++    const uint64_t evaluation_context_identity = reuse_host_keys ?
++        host_key_before.generation : reinterpret_cast<uint64_t>(context);
+     const uint64_t evaluation_context_handle = context->get();
+     int ret = run_fhe_gpu_task(task_handle, input_args.data(), input_args.size(), output_args.data(),
+                                output_args.size(), c_cb, c_ud, gpu_device, evaluation_context_identity,
+@@ -157,6 +181,17 @@ uint64_t FheTaskGpu::run(FheContext* context,
+     std::cout << "Run GPU time: " << duration.count() / 1.0e6 << " ms" << std::endl;
+ #endif
+ 
++    host_key_request.complete();
++    if (reuse_host_keys) {
++        const auto stats = _host_key_export_cache->stats();
++        std::fprintf(stderr,
++            "[Host Key Cache] cap=%llu used=%llu entries=%llu generation=%llu hits=%llu misses=%llu rejected=%llu\n",
++            static_cast<unsigned long long>(stats.cap), static_cast<unsigned long long>(stats.used),
++            static_cast<unsigned long long>(stats.entries), static_cast<unsigned long long>(stats.generation),
++            static_cast<unsigned long long>(stats.hits - host_key_before.hits),
++            static_cast<unsigned long long>(stats.misses - host_key_before.misses),
++            static_cast<unsigned long long>(stats.rejected - host_key_before.rejected));
++    }
+     return duration.count();
+ }
+ }  // namespace lattisense
+diff --git a/fhe_ops_lib/lattigo/go_sdk/c_struct_import_export.go b/fhe_ops_lib/lattigo/go_sdk/c_struct_import_export.go
+index 085b3de..43f3721 100644
+--- a/fhe_ops_lib/lattigo/go_sdk/c_struct_import_export.go
++++ b/fhe_ops_lib/lattigo/go_sdk/c_struct_import_export.go
+@@ -6,6 +6,7 @@ package main
+ */
+ import "C"
+ import (
++	"sync"
+ 	"unsafe"
+ 
+ 	"github.com/cipherflow-fhe/lattigo/bfv"
+@@ -15,6 +16,24 @@ import (
+ 	"github.com/cipherflow-fhe/lattigo/rlwe/ringqp"
+ )
+ 
++type ckksPlaintextMulExportCacheKey struct {
++	parameterHandle uint64
++	plaintextHandle uint64
++	mfNbits         int
++}
++
++var ckksPlaintextMulExportCache sync.Map
++
++func clearCkksPlaintextMulExportCache(handle uint64) {
++	ckksPlaintextMulExportCache.Range(func(key, _ any) bool {
++		cacheKey := key.(ckksPlaintextMulExportCacheKey)
++		if cacheKey.parameterHandle == handle || cacheKey.plaintextHandle == handle {
++			ckksPlaintextMulExportCache.Delete(cacheKey)
++		}
++		return true
++	})
++}
++
+ func import_component(src *C.CComponent, dest *[]uint64) {
+ 	N := int(src.n)
+ 	// Zero-copy: dest slice points directly into C memory (src.data).
+@@ -34,18 +53,6 @@ func export_component(src *[]uint64, dest *C.CComponent) {
+ 	copy(unsafe.Slice((*uint64)(unsafe.Pointer(dest.data)), N), *src)
+ }
+ 
+-// wrap_c_components_as_ring_poly creates a ring.Poly whose Coeffs slices
+-// point directly into C-allocated CComponent data. This allows ring
+-// operations (InvMForm, MulByPow2, etc.) to transform C memory in-place
+-// without an additional copy.
+-func wrap_c_components_as_ring_poly(comps []C.CComponent) *ring.Poly {
+-	poly := &ring.Poly{Coeffs: make([][]uint64, len(comps))}
+-	for i := range comps {
+-		poly.Coeffs[i] = unsafe.Slice((*uint64)(unsafe.Pointer(comps[i].data)), int(comps[i].n))
+-	}
+-	return poly
+-}
+-
+ func import_polynomial(src *C.CPolynomial, dest *ring.Poly) {
+ 	component_slice := unsafe.Slice(src.components, src.n_component)
+ 	for i := 0; i < int(src.n_component); i++ {
+@@ -88,13 +95,38 @@ func export_polynomial_qp(src *ringqp.Poly, dest *C.CPolynomial, level int, sp_l
+ 	}
+ }
+ 
+-func export_public_key(src *rlwe.CiphertextQP, dest *C.CPublicKey, level int, sp_level int) {
++func export_public_key(params rlwe.Parameters, src *rlwe.CiphertextQP, dest *C.CPublicKey, level int, sp_level int, mf_nbits int) {
+ 	dest.level = C.int(level)
+ 	dest.degree = C.int(1)
+ 	dest.polys = (*C.CPolynomial)(C.malloc(C.size_t(unsafe.Sizeof(C.CPolynomial{})) * C.size_t(2)))
+ 	poly_slice := unsafe.Slice(dest.polys, 2)
+ 	for i := 0; i < 2; i++ {
+-		export_polynomial_qp(&src.Value[i], &poly_slice[i], level, sp_level)
++		poly := &src.Value[i]
++		diff := mf_nbits - 64
++		if diff != 0 {
++			transformed := src.Value[i].CopyNew()
++			if level != -1 {
++				transformed.Q.Coeffs = transformed.Q.Coeffs[:level+1]
++			}
++			if sp_level != -1 {
++				transformed.P.Coeffs = transformed.P.Coeffs[:sp_level+1]
++			}
++
++			ringq := params.RingQ()
++			ringp := params.RingP()
++			if diff == -64 {
++				ringq.InvMForm(transformed.Q, transformed.Q)
++				ringp.InvMForm(transformed.P, transformed.P)
++			} else if diff > 0 {
++				ringq.MulByPow2(transformed.Q, diff, transformed.Q)
++				ringp.MulByPow2(transformed.P, diff, transformed.P)
++			} else {
++				ringq.InvMFormAndMulByPow2(transformed.Q, 64+diff, transformed.Q)
++				ringp.InvMFormAndMulByPow2(transformed.P, 64+diff, transformed.P)
++			}
++			poly = &transformed
++		}
++		export_polynomial_qp(poly, &poly_slice[i], level, sp_level)
+ 	}
+ }
+ 
+@@ -110,47 +142,14 @@ func export_key_switch_key(params rlwe.Parameters, src *rlwe.SwitchingKey, dest
+ 		}
+ 	}
+ 
+-	// Export directly from src (single copy: Go → C)
++	// Transform a Go-owned copy before exporting it. Constructing ring.Poly
++	// views over C allocations corrupted Go slice pointers under concurrent
++	// callbacks and eventually caused "found bad pointer in Go heap".
+ 	dest.n_public_key = C.int(n_public_key)
+ 	dest.public_keys = (*C.CPublicKey)(C.malloc(C.size_t(unsafe.Sizeof(C.CPublicKey{})) * C.size_t(n_public_key)))
+ 	public_key_slice := unsafe.Slice(dest.public_keys, n_public_key)
+ 	for i := 0; i < n_public_key; i++ {
+-		export_public_key(&src.Value[i][0], &public_key_slice[i], level, sp_level)
+-	}
+-
+-	// Transform C memory in-place (avoids CopyNew double-copy)
+-	diff := mf_nbits - 64
+-	if diff != 0 {
+-		ringq := params.RingQ()
+-		ringp := params.RingP()
+-
+-		// Determine Q/P component counts
+-		var n_q_component int
+-		if level == -1 {
+-			n_q_component = src.Value[0][0].Value[0].LevelQ() + 1
+-		} else {
+-			n_q_component = level + 1
+-		}
+-
+-		for i := 0; i < n_public_key; i++ {
+-			pk_poly_slice := unsafe.Slice(public_key_slice[i].polys, 2)
+-			for j := 0; j < 2; j++ {
+-				comp_slice := unsafe.Slice(pk_poly_slice[j].components, int(pk_poly_slice[j].n_component))
+-				q_poly := wrap_c_components_as_ring_poly(comp_slice[:n_q_component])
+-				p_poly := wrap_c_components_as_ring_poly(comp_slice[n_q_component:])
+-
+-				if diff == -64 {
+-					ringq.InvMForm(q_poly, q_poly)
+-					ringp.InvMForm(p_poly, p_poly)
+-				} else if diff > 0 {
+-					ringq.MulByPow2(q_poly, diff, q_poly)
+-					ringp.MulByPow2(p_poly, diff, p_poly)
+-				} else {
+-					ringq.InvMFormAndMulByPow2(q_poly, 64+diff, q_poly)
+-					ringp.InvMFormAndMulByPow2(p_poly, 64+diff, p_poly)
+-				}
+-			}
+-		}
++		export_public_key(params, &src.Value[i][0], &public_key_slice[i], level, sp_level, mf_nbits)
+ 	}
+ }
+ 
+@@ -235,13 +234,23 @@ func ExportCkksPlaintextMul(parameter_handle uint64, plaintext_mul_handle uint64
+ 	c_plaintext.is_ntt = C.bool(true)
+ 	c_plaintext.is_mform = C.bool(true)
+ 	c_plaintext.is_ringt = C.bool(false)
+-	export_polynomial(plaintext_mul.Value, &c_plaintext.poly)
+-	// Transform C memory in-place (avoids CopyNew double-copy)
++	poly := plaintext_mul.Value
+ 	if mf_nbits != 64 {
+-		comp_slice := unsafe.Slice(c_plaintext.poly.components, int(c_plaintext.poly.n_component))
+-		c_poly := wrap_c_components_as_ring_poly(comp_slice)
+-		param.RingQ().InvMFormAndMulByPow2(c_poly, mf_nbits, c_poly)
++		cacheKey := ckksPlaintextMulExportCacheKey{
++			parameterHandle: parameter_handle,
++			plaintextHandle: plaintext_mul_handle,
++			mfNbits:         mf_nbits,
++		}
++		if cached, ok := ckksPlaintextMulExportCache.Load(cacheKey); ok {
++			poly = cached.(*ring.Poly)
++		} else {
++			transformed := plaintext_mul.Value.CopyNew()
++			param.RingQ().InvMFormAndMulByPow2(transformed, mf_nbits, transformed)
++			cached, _ := ckksPlaintextMulExportCache.LoadOrStore(cacheKey, transformed)
++			poly = cached.(*ring.Poly)
++		}
+ 	}
++	export_polynomial(poly, &c_plaintext.poly)
+ }
+ 
+ //export ExportBfvPlaintext
+diff --git a/fhe_ops_lib/lattigo/go_sdk/main.go b/fhe_ops_lib/lattigo/go_sdk/main.go
+index 5c36c8f..3cb85ae 100644
+--- a/fhe_ops_lib/lattigo/go_sdk/main.go
++++ b/fhe_ops_lib/lattigo/go_sdk/main.go
+@@ -1041,6 +1041,7 @@ func CopyCkksCiphertext3To(x_ciphertext_handle uint64, y_ciphertext_handle uint6
+ 
+ //export ReleaseHandle
+ func ReleaseHandle(handle uint64) {
++	clearCkksPlaintextMulExportCache(handle)
+ 	delete_object(handle)
+ }
+ 
+diff --git a/mega_ag_runners/gpu/gpu_abi_bridge_executors.h b/mega_ag_runners/gpu/gpu_abi_bridge_executors.h
+index 633fffb..df076ff 100644
+--- a/mega_ag_runners/gpu/gpu_abi_bridge_executors.h
++++ b/mega_ag_runners/gpu/gpu_abi_bridge_executors.h
+@@ -403,6 +403,23 @@ public:
+           evaluation_context_identity_(evaluation_context_identity),
+           evaluation_context_generation_(evaluation_context_generation),
+           gpu_device_(gpu_device) {
++        if (const char* raw = std::getenv("LATTISENSE_GPU_PLAINTEXT_CACHE_MAX_BYTES")) {
++            char* end = nullptr;
++            const auto cap = std::strtoull(raw, &end, 10);
++            if (raw == end || *end != '\0' || *raw == '-' || cap > (32ULL << 30)) {
++                throw std::invalid_argument("GPU plaintext cache cap must be 0..32 GiB in bytes");
++            }
++            plaintext_cap_bytes_ = static_cast<size_t>(cap);
++        }
++        if (const char* raw = std::getenv("LATTISENSE_GPU_CONVERTED_PLAINTEXT_MAX_BYTES")) {
++            char* end = nullptr;
++            const auto cap = std::strtoull(raw, &end, 10);
++            if (raw == end || *end != '\0' || *raw == '-' || cap > (16ULL << 30))
++                throw std::invalid_argument("Converted plaintext cap must be 0..16 GiB");
++            converted_cap_bytes_ = static_cast<size_t>(cap);
++            if (cap != 0 && plaintext_cap_bytes_ == 0)
++                throw std::invalid_argument("Converted cache requires checked raw cache");
++        }
+         CHECK(cudaSetDevice(gpu_device_));
+         CHECK(cudaStreamCreate(&upload_stream_));
+         upload_options_ = heongpu::ExecutionOptions().set_stream(upload_stream_);
+@@ -420,6 +437,14 @@ public:
+             galois_key_.reset();
+             loaded_galois_keys_.clear();
+             switch_keys_.clear();
++            if (plaintext_cap_bytes_ != 0) {
++                std::fprintf(stderr, "[GPU Checked Plaintext Cache] cap=%zu used=%zu entries=%zu hits=%llu misses=%llu changed=%llu rejected=%llu\n",
++                    plaintext_cap_bytes_, plaintext_used_bytes_, plaintexts_.size(),
++                    static_cast<unsigned long long>(plaintext_hits_), static_cast<unsigned long long>(plaintext_misses_),
++                    static_cast<unsigned long long>(plaintext_changed_), static_cast<unsigned long long>(plaintext_rejected_));
++            }
++            plaintexts_.clear();
++            plaintext_owners_.clear();
+         }
+         cudaStreamSynchronize(upload_stream_);
+         cudaStreamDestroy(upload_stream_);
+@@ -493,8 +518,117 @@ public:
+         return result;
+     }
+ 
++
++    // Exact-content cache: graph identity is only an index, never proof that
++    // a plaintext is unchanged. Keep the previous owned ABI export alive and
++    // compare all metadata and coefficient bytes on every hit.
++    std::shared_ptr<heongpu::Plaintext<SchemeType>> get_plaintext(
++        const std::shared_ptr<CPlaintext>& source, const DatumNode& node, bool is_ringt) {
++        if (plaintext_cap_bytes_ == 0) return {};
++        const auto& src = *source;
++        std::lock_guard<std::mutex> lock(mutex_);
++        auto found = plaintexts_.find(node.index);
++        if (found != plaintexts_.end()) {
++            const auto& previous = *found->second.host;
++            bool equal = found->second.is_ringt == is_ringt &&
++                previous.level == src.level && previous.scale == src.scale &&
++                previous.is_ntt == src.is_ntt && previous.is_mform == src.is_mform &&
++                previous.is_ringt == src.is_ringt &&
++                previous.poly.n_component == src.poly.n_component;
++            for (int i = 0; equal && i < src.poly.n_component; ++i) {
++                const auto& lhs = previous.poly.components[i];
++                const auto& rhs = src.poly.components[i];
++                equal = lhs.n == rhs.n && lhs.n > 0 &&
++                    std::memcmp(lhs.data, rhs.data, static_cast<size_t>(lhs.n) * sizeof(uint64_t)) == 0;
++            }
++            if (equal) {
++                ++plaintext_hits_;
++                return found->second.device;
++            }
++            // Never overwrite an entry which another stream might be reading.
++            ++plaintext_changed_;
++            return {};
++        }
++        size_t bytes = 0;
++        if (src.poly.n_component <= 0) return {};
++        for (int i = 0; i < src.poly.n_component; ++i) {
++            if (src.poly.components[i].n <= 0) return {};
++            const size_t component_bytes = static_cast<size_t>(src.poly.components[i].n) * sizeof(uint64_t);
++            if (component_bytes > plaintext_cap_bytes_ - bytes) return {};
++            bytes += component_bytes;
++        }
++        if (bytes > plaintext_cap_bytes_ - plaintext_used_bytes_) {
++            ++plaintext_rejected_;
++            return {};
++        }
++        std::shared_ptr<heongpu::Plaintext<SchemeType>> device;
++        if constexpr (SchemeType == heongpu::Scheme::CKKS) {
++            device = std::make_shared<heongpu::Plaintext<SchemeType>>(
++                context_, src.level, is_ringt, upload_options_);
++        } else {
++            device = std::make_shared<heongpu::Plaintext<SchemeType>>(
++                context_, src.level, upload_options_);
++            device->set_ringt(is_ringt);
++        }
++        export_plaintext(src, *device);
++        // Publish only completed uploads: all requesting streams can safely use
++        // the cached buffer, without borrowing request-local event lifetimes.
++        CHECK(cudaStreamSynchronize(upload_stream_));
++        plaintexts_.emplace(node.index, PlaintextEntry{source, device, is_ringt});
++        plaintext_owners_.emplace(device.get(), node.index);
++        plaintext_used_bytes_ += bytes;
++        ++plaintext_misses_;
++        return device;
++    }
++
++
++    // Called only for cached, exact-content-validated RingT operands. The
++    // owning raw entry survives every consumer; dynamic inputs never enter here.
++    std::shared_ptr<heongpu::Plaintext<SchemeType>> get_converted_plaintext(
++        const std::shared_ptr<heongpu::Plaintext<SchemeType>>& raw, int level) {
++        if constexpr (SchemeType != heongpu::Scheme::CKKS) {
++            return {};
++        } else {
++            if (converted_cap_bytes_ == 0) return {};
++            std::lock_guard<std::mutex> lock(mutex_);
++            const auto owner = plaintext_owners_.find(raw.get());
++            if (owner == plaintext_owners_.end()) return {};
++            auto& entry = plaintexts_.at(owner->second);
++            if (entry.device != raw || !entry.is_ringt ||
++                entry.host->poly.n_component != 1 ||
++                entry.host->poly.components[0].n != context_->get_poly_modulus_degree() ||
++                level < 0 || level >= context_->get_ciphertext_modulus_count()) return {};
++            const auto hit = entry.converted.find(level);
++            if (hit != entry.converted.end()) {
++                ++converted_hits_;
++                return hit->second;
++            }
++            const size_t bytes = static_cast<size_t>(context_->get_poly_modulus_degree()) *
++                                 static_cast<size_t>(level + 1) * sizeof(uint64_t);
++            if (bytes > converted_cap_bytes_ - converted_used_bytes_) return {};
++            auto result = std::make_shared<heongpu::Plaintext<SchemeType>>(
++                context_, level, false, upload_options_);
++            // The ABI bridge currently uses constructor metadata for raw PTs.
++            // Fail closed if that convention changes, rather than losing scale.
++            if (result->scale() != raw->scale() ||
++                result->encoding_type() != raw->encoding_type()) return {};
++            heongpu::HEOperator<SchemeType>::prepare_ringt_plaintext(
++                context_, *raw, *result, upload_stream_);
++            CHECK(cudaStreamSynchronize(upload_stream_));
++            entry.converted.emplace(level, result);
++            converted_used_bytes_ += bytes;
++            ++converted_misses_;
++            return result;
++        }
++    }
++
+     GpuKeyCacheSnapshot snapshot() const {
+         std::lock_guard<std::mutex> lock(mutex_);
++        if (converted_cap_bytes_ != 0)
++            std::fprintf(stderr, "[GPU Converted Plaintext Cache] cap=%zu used=%zu hits=%llu misses=%llu\n",
++                converted_cap_bytes_, converted_used_bytes_,
++                static_cast<unsigned long long>(converted_hits_),
++                static_cast<unsigned long long>(converted_misses_));
+         return stats_;
+     }
+ 
+@@ -535,6 +669,20 @@ private:
+                        std::shared_ptr<heongpu::Switchkey<SchemeType>>,
+                        GpuKeyCacheKeyHash>
+         switch_keys_;
++    struct PlaintextEntry {
++        std::shared_ptr<CPlaintext> host;
++        std::shared_ptr<heongpu::Plaintext<SchemeType>> device;
++        bool is_ringt;
++        std::unordered_map<int, std::shared_ptr<heongpu::Plaintext<SchemeType>>> converted;
++    };
++    std::unordered_map<uint64_t, PlaintextEntry> plaintexts_;
++    std::unordered_map<const heongpu::Plaintext<SchemeType>*, uint64_t> plaintext_owners_;
++    size_t converted_cap_bytes_ = 0, converted_used_bytes_ = 0;
++    uint64_t converted_hits_ = 0, converted_misses_ = 0;
++    size_t plaintext_cap_bytes_ = 0;
++    size_t plaintext_used_bytes_ = 0;
++    uint64_t plaintext_hits_ = 0, plaintext_misses_ = 0;
++    uint64_t plaintext_changed_ = 0, plaintext_rejected_ = 0;
+     GpuKeyCacheSnapshot stats_;
+ };
+ 
+@@ -624,6 +772,12 @@ template <heongpu::Scheme SchemeType> ExecutorFunc create_load_to_gpu_executor()
+                 const CPlaintext* c_pt = c_pt_ptr.get();
+                 const bool is_ringt = input_node->fhe_prop->p.has_value() &&
+                                       input_node->fhe_prop->p->is_ringt;
++                if (key_cache != nullptr) {
++                    if (auto cached = key_cache->get_plaintext(c_pt_ptr, *input_node, is_ringt)) {
++                        gpu_data = std::move(cached);
++                        break;
++                    }
++                }
+                 std::shared_ptr<heongpu::Plaintext<SchemeType>> output_ptr;
+                 if constexpr (SchemeType == heongpu::Scheme::CKKS) {
+                     output_ptr = std::make_shared<heongpu::Plaintext<SchemeType>>(
+diff --git a/mega_ag_runners/gpu/gpu_wrapper.cu b/mega_ag_runners/gpu/gpu_wrapper.cu
+index f750166..bc08f7f 100644
+--- a/mega_ag_runners/gpu/gpu_wrapper.cu
++++ b/mega_ag_runners/gpu/gpu_wrapper.cu
+@@ -15,6 +15,7 @@
+ // SPDX-License-Identifier: Apache-2.0
+ 
+ #include <iostream>
++#include <cuda_profiler_api.h>
+ #include <unordered_map>
+ #include <vector>
+ #include <thread>
+@@ -271,6 +272,16 @@ void _run_mega_ag_impl(gsl::span<CArgument> input_args,
+     // Use the runtime-specified device so all worker threads bind to the same device.
+     const int device = gpu_device;
+     CHECK(cudaSetDevice(device));
++    // Optional Nsight capture: exactly the second GPU request, excluding setup
++    // and warmup. Unprofiled A/B runs leave this disabled.
++    static std::atomic<unsigned> profile_request_sequence{0};
++    const char* profile_env = std::getenv("LATTISENSE_GPU_PROFILE_HOT");
++    const bool profile_hot = profile_env != nullptr && std::strcmp(profile_env, "1") == 0 &&
++        profile_request_sequence.fetch_add(1) == 1;
++    if (profile_hot) {
++        std::fprintf(stderr, "[GPU Hot Profile] begin request=2\n");
++        CHECK(cudaProfilerStart());
++    }
+ 
+     // Initialize GPU context and operators for GPU FHE operations
+     heongpu::HEContext<SchemeType> local_context;
+@@ -293,7 +304,19 @@ void _run_mega_ag_impl(gsl::span<CArgument> input_args,
+         key_cache != nullptr ? key_cache->snapshot() : GpuKeyCacheSnapshot{};
+ 
+     // GPU streams for FHE computations
+-    const int num_streams = 4;
++    int num_streams = 4;
++    if (const char* value = std::getenv("LATTISENSE_GPU_SUBMISSION_THREADS")) {
++        char* end = nullptr;
++        const long requested = std::strtol(value, &end, 10);
++        if (end == value || *end != '\0' || requested < 1 || requested > 16) {
++            throw std::invalid_argument("LATTISENSE_GPU_SUBMISSION_THREADS must be 1..16");
++        }
++        num_streams = static_cast<int>(requested);
++    }
++    std::fprintf(stderr, "[GPU Submission Threads] count=%d\n", num_streams);
++    // Keep CPU executor capacity fixed while varying GPU submission streams.
++    // Defaults reproduce the original 4 GPU + 12 CPU thread configuration.
++
+     std::vector<cudaStream_t> streams(num_streams);
+     std::vector<heongpu::ExecutionOptions> stream_options(num_streams);
+     GpuPinnedH2DStats pinned_h2d_stats;
+@@ -313,7 +336,7 @@ void _run_mega_ag_impl(gsl::span<CArgument> input_args,
+     }
+ 
+     // CPU thread pool for CPU tasks (custom nodes + ABI bridge nodes)
+-    const int num_cpu_threads = std::min(16, static_cast<int>(std::thread::hardware_concurrency())) - num_streams;
++    const int num_cpu_threads = std::min(16, static_cast<int>(std::thread::hardware_concurrency())) - 4;
+     BS::priority_thread_pool cpu_pool(num_cpu_threads > 0 ? num_cpu_threads : 1);
+ 
+     // Create CPU contexts for CPU nodes (ABI bridge only, no keys needed)
+@@ -367,7 +390,9 @@ void _run_mega_ag_impl(gsl::span<CArgument> input_args,
+                         compute_node.fhe_prop.has_value() ? compute_node.fhe_prop->op_type : OperationType::UNKNOWN;
+ 
+                     const std::vector<DatumNode*>& compute_input_nodes = compute_node.input_nodes;
+-                    const DatumNode* compute_output_node = compute_node.output_nodes[0];
++                    const std::vector<DatumNode*>& compute_output_nodes = compute_node.output_nodes;
++                    const bool is_rotation_batch =
++                        op == OperationType::ROTATE_COL && compute_output_nodes.size() > 1;
+ 
+                     std::vector<cudaEvent_t> events_to_wait;
+                     std::unordered_map<uint64_t, std::any> thread_input_cache;
+@@ -422,6 +447,8 @@ void _run_mega_ag_impl(gsl::span<CArgument> input_args,
+                         exec_ctx.bootstrap_rescale_scale = mega_ag.parameter["q"][1].get<double>();
+                     }
+                     exec_ctx.other_args.push_back(&stream_options[stream_id]);
++                    if (op != OperationType::LOAD_TO_BACKEND)
++                        exec_ctx.other_args.push_back(key_cache);
+ 
+                     // LOAD_TO_BACKEND needs HEContext and galois_key parameters
+                     if (op == OperationType::LOAD_TO_BACKEND) {
+@@ -440,10 +467,23 @@ void _run_mega_ag_impl(gsl::span<CArgument> input_args,
+                     // internally) LOAD_TO_BACKEND: allocates GPU memory internally STORE_FROM_BACKEND: outputs to C
+                     // struct (not GPU memory)
+                     if (op != OperationType::LOAD_TO_BACKEND && op != OperationType::STORE_FROM_BACKEND) {
+-                        int output_level = compute_output_node->fhe_prop->level;
+-                        auto output_ptr = std::make_shared<heongpu::Ciphertext<SchemeType>>(context, output_level,
+-                                                                                            stream_options[stream_id]);
+-                        output = output_ptr;
++                        if (is_rotation_batch) {
++                            std::vector<std::shared_ptr<heongpu::Ciphertext<SchemeType>>> output_batch;
++                            output_batch.reserve(compute_output_nodes.size());
++                            for (const DatumNode* output_node : compute_output_nodes) {
++                                output_batch.push_back(
++                                    std::make_shared<heongpu::Ciphertext<SchemeType>>(
++                                        context, output_node->fhe_prop->level,
++                                        stream_options[stream_id]));
++                            }
++                            output = std::move(output_batch);
++                        } else {
++                            int output_level = compute_output_nodes[0]->fhe_prop->level;
++                            auto output_ptr =
++                                std::make_shared<heongpu::Ciphertext<SchemeType>>(
++                                    context, output_level, stream_options[stream_id]);
++                            output = output_ptr;
++                        }
+                     }
+ 
+                     try {
+@@ -482,48 +522,61 @@ void _run_mega_ag_impl(gsl::span<CArgument> input_args,
+                         std::abort();
+                     }
+ 
+-                    // Create event for GPU backend outputs (not STORE_FROM_BACKEND which outputs to C struct)
+-                    cudaEvent_t output_event;
+-                    bool has_output_event = false;
++                    // A rotation batch exposes several data nodes. Each gets
++                    // its own event so the existing event cache and cleanup
++                    // retain one-owner semantics.
++                    std::vector<cudaEvent_t> output_events;
+                     if (op != OperationType::STORE_FROM_BACKEND) {
+-                        if (reuse_data_ready_events) {
+-                            output_event = persistent_runtime->get_data_ready_event(compute_output_node->index);
+-                        } else {
+-                            CHECK(cudaEventCreate(&output_event));
++                        output_events.reserve(compute_output_nodes.size());
++                        for (const DatumNode* output_node : compute_output_nodes) {
++                            cudaEvent_t output_event;
++                            if (reuse_data_ready_events) {
++                                output_event = persistent_runtime->get_data_ready_event(output_node->index);
++                            } else {
++                                CHECK(cudaEventCreate(&output_event));
++                            }
++                            CHECK(cudaEventRecord(output_event, streams[stream_id]));
++                            output_events.push_back(output_event);
+                         }
+-                        CHECK(cudaEventRecord(output_event, streams[stream_id]));
+-                        has_output_event = true;
+                     }
+ 
+                     {
+                         std::lock_guard<std::mutex> lock(m_mutex);
+ 
+-                        // Store output in available_data
+-                        available_data[compute_output_node->index] = output;
+-
+-                        // Store event if created
+-                        if (has_output_event) {
+-                            data_ready_events[compute_output_node->index] = output_event;
++                        if (is_rotation_batch) {
++                            auto& output_batch =
++                                *std::any_cast<std::vector<std::shared_ptr<
++                                    heongpu::Ciphertext<SchemeType>>>>(&output);
++                            for (std::size_t i = 0; i < compute_output_nodes.size(); ++i) {
++                                available_data[compute_output_nodes[i]->index] = output_batch[i];
++                            }
++                        } else {
++                            available_data[compute_output_nodes[0]->index] = output;
+                         }
+ 
+-                        // Update available computes
+-                        std::unordered_set<NodeIndex> newly_available_computes =
+-                            mega_ag.step_available_computes(*compute_output_node, available_data);
++                        for (std::size_t i = 0; i < output_events.size(); ++i) {
++                            data_ready_events[compute_output_nodes[i]->index] = output_events[i];
++                        }
+ 
+-                        for (const auto& new_task_index : newly_available_computes) {
+-                            if (queued_computes.find(new_task_index) == queued_computes.end()) {
+-                                task_queue.push({mega_ag.computes.at(new_task_index).priority, new_task_index});
+-                                queued_computes.insert(new_task_index);
++                        for (const DatumNode* output_node : compute_output_nodes) {
++                            std::unordered_set<NodeIndex> newly_available_computes =
++                                mega_ag.step_available_computes(*output_node, available_data);
++                            for (const auto& new_task_index : newly_available_computes) {
++                                if (queued_computes.find(new_task_index) == queued_computes.end()) {
++                                    task_queue.push(
++                                        {mega_ag.computes.at(new_task_index).priority,
++                                         new_task_index});
++                                    queued_computes.insert(new_task_index);
++                                }
+                             }
+                         }
+                     }
+ 
+                     gpu_pool.detach_task(
+-                        [compute_node, output_event, has_output_event, device, &mega_ag, &m_mutex, &available_data,
++                        [compute_node, output_events, device, &mega_ag, &m_mutex, &available_data,
+                          &data_ref_counts]() {
+                             CHECK(cudaSetDevice(device));
+-                            // Wait for GPU computation to complete if event exists
+-                            if (has_output_event) {
++                            for (cudaEvent_t output_event : output_events) {
+                                 CHECK(cudaEventSynchronize(output_event));
+                             }
+ 
+@@ -624,6 +677,11 @@ void _run_mega_ag_impl(gsl::span<CArgument> input_args,
+ #ifdef LATTISENSE_DEV
+     gpu_mem_monitor.stop();
+ #endif
++    if (profile_hot) {
++        CHECK(cudaDeviceSynchronize());
++        CHECK(cudaProfilerStop());
++        std::fprintf(stderr, "[GPU Hot Profile] end request=2\n");
++    }
+ }
+ 
+ // Dispatch function to call _run_mega_ag_impl with appropriate TContext
+diff --git a/mega_ag_runners/gpu/mega_ag_executors_gpu.cu b/mega_ag_runners/gpu/mega_ag_executors_gpu.cu
+index cd76ed8..a166df3 100644
+--- a/mega_ag_runners/gpu/mega_ag_executors_gpu.cu
++++ b/mega_ag_runners/gpu/mega_ag_executors_gpu.cu
+@@ -24,6 +24,7 @@
+ #include <tuple>
+ #include <HEonGPU-1.1/heongpu/heongpu.hpp>
+ #include "../mega_ag_executors.h"
++#include "gpu_abi_bridge_executors.h"
+ 
+ template <heongpu::Scheme S> using Ct = heongpu::Ciphertext<S>;
+ template <heongpu::Scheme S> using Pt = heongpu::Plaintext<S>;
+@@ -31,6 +32,23 @@ template <heongpu::Scheme S> using Rlk = heongpu::Relinkey<S>;
+ template <heongpu::Scheme S> using Glk = heongpu::Galoiskey<S>;
+ template <heongpu::Scheme S> using Swk = heongpu::Switchkey<S>;
+ 
++
++template <heongpu::Scheme S>
++std::shared_ptr<Pt<S>> _get_ringt_input(
++    ExecutionContext& ctx, const std::unordered_map<NodeIndex, std::any>& inputs,
++    const DatumNode& node, int consumer_level) {
++    auto raw = std::any_cast<std::shared_ptr<Pt<S>>>(inputs.at(node.index));
++    if constexpr (S == heongpu::Scheme::CKKS) {
++        auto* cache = ctx.get_other_arg<GpuEvaluationKeyCache<S>>(1);
++        if (cache) {
++            auto converted = cache->get_converted_plaintext(raw, consumer_level);
++            if (converted) return converted;
++        }
++    }
++    raw->set_ringt(true);
++    return raw;
++}
++
+ // Helper function to find plaintext node in inputs
+ // Returns the 2nd input node (index 1) as the plaintext node when there are exactly 2 inputs
+ static DatumNode* find_plaintext_node(const ComputeNode& node) {
+@@ -86,9 +104,9 @@ template <heongpu::Scheme S> void bind_gpu_add(ComputeNode& node) {
+                                    std::any& output, const ComputeNode& self) -> void {
+                     auto [operators, stream_option] = _get_operator_and_stream_option<S>(ctx);
+                     auto& input0 = _get_input_data<Ct<S>>(inputs, *self.input_nodes[0]);
+-                    auto& input1 = _get_input_data<Pt<S>>(inputs, *self.input_nodes[1]);
++                    auto plaintext = _get_ringt_input<S>(ctx, inputs, *self.input_nodes[1], input0.level());
++                    auto& input1 = *plaintext;
+                     auto& output0 = *std::any_cast<std::shared_ptr<Ct<S>>>(output);
+-                    input1.set_ringt(true);
+                     operators.add_plain(input0, input1, output0, stream_option);
+                 };
+             } else {
+@@ -134,9 +152,9 @@ template <heongpu::Scheme S> void bind_gpu_sub(ComputeNode& node) {
+                                    std::any& output, const ComputeNode& self) -> void {
+                     auto [operators, stream_option] = _get_operator_and_stream_option<S>(ctx);
+                     auto& input0 = _get_input_data<Ct<S>>(inputs, *self.input_nodes[0]);
+-                    auto& input1 = _get_input_data<Pt<S>>(inputs, *self.input_nodes[1]);
++                    auto plaintext = _get_ringt_input<S>(ctx, inputs, *self.input_nodes[1], input0.level());
++                    auto& input1 = *plaintext;
+                     auto& output0 = *std::any_cast<std::shared_ptr<Ct<S>>>(output);
+-                    input1.set_ringt(true);
+                     operators.sub_plain(input0, input1, output0, stream_option);
+                 };
+             } else {
+@@ -192,9 +210,9 @@ template <heongpu::Scheme S> void bind_gpu_mult(ComputeNode& node) {
+                                    std::any& output, const ComputeNode& self) -> void {
+                     auto [operators, stream_option] = _get_operator_and_stream_option<S>(ctx);
+                     auto& input0 = _get_input_data<Ct<S>>(inputs, *self.input_nodes[0]);
+-                    auto& input1 = _get_input_data<Pt<S>>(inputs, *self.input_nodes[1]);
++                    auto plaintext = _get_ringt_input<S>(ctx, inputs, *self.input_nodes[1], input0.level());
++                    auto& input1 = *plaintext;
+                     auto& output0 = *std::any_cast<std::shared_ptr<Ct<S>>>(output);
+-                    input1.set_ringt(true);
+                     operators.multiply_plain(input0, input1, output0, stream_option);
+                 };
+             } else {
+@@ -265,6 +283,54 @@ template <heongpu::Scheme S> void bind_gpu_rotate_col(ComputeNode& node) {
+     if (!node.fhe_prop->p.has_value()) {
+         throw std::runtime_error("Rotation step not found in FHE property");
+     }
++    const std::vector<int32_t> batch_steps = node.fhe_prop->p->rotation_steps;
++    if (!batch_steps.empty()) {
++        node.executor = [batch_steps](ExecutionContext& ctx,
++                                      const std::unordered_map<NodeIndex, std::any>& inputs,
++                                      std::any& output,
++                                      const ComputeNode& self) -> void {
++            if constexpr (S != heongpu::Scheme::CKKS) {
++                throw std::runtime_error("Batched rotations are only supported for CKKS");
++            } else {
++                if (self.input_nodes.size() != batch_steps.size() + 1 ||
++                    self.output_nodes.size() != batch_steps.size()) {
++                    throw std::runtime_error("Invalid batched rotation node shape");
++                }
++                auto [operators, stream_option] = _get_operator_and_stream_option<S>(ctx);
++                auto& input0 = _get_input_data<Ct<S>>(inputs, *self.input_nodes[0]);
++                auto* output_batch =
++                    std::any_cast<std::vector<std::shared_ptr<Ct<S>>>>(&output);
++                if (output_batch == nullptr || output_batch->size() != batch_steps.size()) {
++                    throw std::runtime_error("Invalid batched rotation output count");
++                }
++                auto& outputs = *output_batch;
++
++                auto* shared_key =
++                    std::any_cast<std::shared_ptr<Glk<S>>>(&inputs.at(self.input_nodes[1]->index));
++                if (shared_key == nullptr || !*shared_key) {
++                    throw std::runtime_error("Missing batched rotation Galois key");
++                }
++                for (std::size_t i = 2; i < self.input_nodes.size(); ++i) {
++                    auto* key = std::any_cast<std::shared_ptr<Glk<S>>>(
++                        &inputs.at(self.input_nodes[i]->index));
++                    if (key == nullptr || !*key || key->get() != shared_key->get()) {
++                        throw std::runtime_error(
++                            "Batched rotations require the persistent shared Galois-key cache");
++                    }
++                }
++
++                std::vector<Ct<S>*> output_ptrs;
++                output_ptrs.reserve(outputs.size());
++                for (auto& item : outputs) {
++                    output_ptrs.push_back(item.get());
++                }
++                std::vector<int> shifts(batch_steps.begin(), batch_steps.end());
++                operators.rotate_rows_many(input0, output_ptrs, **shared_key,
++                                           shifts, stream_option);
++            }
++        };
++        return;
++    }
+     int step = node.fhe_prop->p->rotation_step;
+     node.executor = [step](ExecutionContext& ctx, const std::unordered_map<NodeIndex, std::any>& inputs,
+                            std::any& output, const ComputeNode& self) -> void {
+@@ -307,14 +373,15 @@ template <heongpu::Scheme S> void bind_gpu_cmpac_sum(ComputeNode& node) {
+                             std::any& output, const ComputeNode& self) -> void {
+             auto [operators, stream_option] = _get_operator_and_stream_option<S>(ctx);
+             auto& input_ct_0 = _get_input_data<Ct<S>>(inputs, *self.input_nodes[0]);
+-            auto& input_pt_0 = _get_input_data<Pt<S>>(inputs, *self.input_nodes[n + 1]);
+-            input_pt_0.set_ringt(true);
++            auto plaintext_0 = _get_ringt_input<S>(ctx, inputs, *self.input_nodes[n + 1], input_ct_0.level());
++            auto& input_pt_0 = *plaintext_0;
++            // Cached conversion is immutable and already in normal PT format.
+             Ct<S> sum;
+             operators.multiply_plain(input_ct_0, input_pt_0, sum, stream_option);
+             for (int i = 1; i < n; i++) {
+                 auto& input_ct_i = _get_input_data<Ct<S>>(inputs, *self.input_nodes[i]);
+-                auto& input_pt_i = _get_input_data<Pt<S>>(inputs, *self.input_nodes[n + 1 + i]);
+-                input_pt_i.set_ringt(true);
++                auto plaintext_i = _get_ringt_input<S>(ctx, inputs, *self.input_nodes[n + 1 + i], input_ct_i.level());
++                auto& input_pt_i = *plaintext_i;
+                 Ct<S> product;
+                 operators.multiply_plain(input_ct_i, input_pt_i, product, stream_option);
+                 operators.add_inplace(sum, product, stream_option);
+@@ -366,14 +433,15 @@ template <heongpu::Scheme S> void bind_gpu_cmp_sum(ComputeNode& node) {
+                             std::any& output, const ComputeNode& self) -> void {
+             auto [operators, stream_option] = _get_operator_and_stream_option<S>(ctx);
+             auto& input_ct_0 = _get_input_data<Ct<S>>(inputs, *self.input_nodes[0]);
+-            auto& input_pt_0 = _get_input_data<Pt<S>>(inputs, *self.input_nodes[n]);
+-            input_pt_0.set_ringt(true);
++            auto plaintext_0 = _get_ringt_input<S>(ctx, inputs, *self.input_nodes[n], input_ct_0.level());
++            auto& input_pt_0 = *plaintext_0;
++            // Retain the exact consumer level for each term, not the sum level.
+             Ct<S> sum;
+             operators.multiply_plain(input_ct_0, input_pt_0, sum, stream_option);
+             for (int i = 1; i < n; i++) {
+                 auto& input_ct_i = _get_input_data<Ct<S>>(inputs, *self.input_nodes[i]);
+-                auto& input_pt_i = _get_input_data<Pt<S>>(inputs, *self.input_nodes[n + i]);
+-                input_pt_i.set_ringt(true);
++                auto plaintext_i = _get_ringt_input<S>(ctx, inputs, *self.input_nodes[n + i], input_ct_i.level());
++                auto& input_pt_i = *plaintext_i;
+                 Ct<S> product;
+                 operators.multiply_plain(input_ct_i, input_pt_i, product, stream_option);
+                 operators.add_inplace(sum, product, stream_option);
+diff --git a/mega_ag_runners/mega_ag.cpp b/mega_ag_runners/mega_ag.cpp
+index aeb70ef..dd3a694 100644
+--- a/mega_ag_runners/mega_ag.cpp
++++ b/mega_ag_runners/mega_ag.cpp
+@@ -16,9 +16,13 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
++#include <algorithm>
++#include <cstdio>
++#include <cstdlib>
+ #include <fstream>
+ #include <queue>
+ #include <string>
++#include <unordered_set>
+ #include "nlohmann/json.hpp"
+ 
+ #include "mega_ag.h"
+@@ -126,6 +130,12 @@ static void redirect_producers(DatumNode& old_data, DatumNode& new_data) {
+ MegaAG MegaAG::load(const std::string& json_path, Processor processor, ScheduleMode mode) {
+     MegaAG mega_ag = from_json(json_path, processor);
+     mega_ag.apply_processor_layout();
++    const char* hoist_rotations = std::getenv("LATTISENSE_GPU_HOIST_ROTATIONS");
++    if (processor == Processor::GPU && mega_ag.algo == ALGO_CKKS &&
++        hoist_rotations != nullptr && hoist_rotations[0] != '\0' &&
++        std::string(hoist_rotations) != "0") {
++        mega_ag.coalesce_gpu_rotation_siblings();
++    }
+     mega_ag.compute_properties(mode);
+     return mega_ag;
+ }
+@@ -334,6 +344,100 @@ void MegaAG::apply_processor_layout() {
+     }
+ }
+ 
++void MegaAG::coalesce_gpu_rotation_siblings() {
++    std::unordered_map<NodeIndex, std::vector<NodeIndex>> rotations_by_source;
++    for (const auto& [compute_index, compute_node] : computes) {
++        if (compute_node.on_cpu || !compute_node.fhe_prop.has_value() ||
++            compute_node.fhe_prop->op_type != OperationType::ROTATE_COL ||
++            !compute_node.fhe_prop->p.has_value() ||
++            compute_node.input_nodes.size() != 2 ||
++            compute_node.output_nodes.size() != 1) {
++            continue;
++        }
++        rotations_by_source[compute_node.input_nodes[0]->index].push_back(compute_index);
++    }
++
++    std::vector<NodeIndex> computes_to_erase;
++    std::size_t batch_count = 0;
++    std::size_t grouped_rotation_count = 0;
++
++    for (auto& [source_index, compute_indices] : rotations_by_source) {
++        if (compute_indices.size() < 2) {
++            continue;
++        }
++        std::sort(compute_indices.begin(), compute_indices.end());
++
++        std::unordered_set<int32_t> unique_steps;
++        std::unordered_set<NodeIndex> unique_keys;
++        std::unordered_set<NodeIndex> unique_outputs;
++        bool compatible = true;
++        for (NodeIndex compute_index : compute_indices) {
++            const ComputeNode& node = computes.at(compute_index);
++            compatible =
++                compatible &&
++                unique_steps.insert(node.fhe_prop->p->rotation_step).second &&
++                unique_keys.insert(node.input_nodes[1]->index).second &&
++                unique_outputs.insert(node.output_nodes[0]->index).second;
++        }
++        if (!compatible) {
++            continue;
++        }
++
++        ComputeNode& batch = computes.at(compute_indices.front());
++        DatumNode* shared_input = batch.input_nodes[0];
++        std::vector<DatumNode*> batch_inputs{shared_input};
++        std::vector<DatumNode*> batch_outputs;
++        std::vector<int32_t> batch_steps;
++        batch_inputs.reserve(compute_indices.size() + 1);
++        batch_outputs.reserve(compute_indices.size());
++        batch_steps.reserve(compute_indices.size());
++
++        for (NodeIndex compute_index : compute_indices) {
++            const ComputeNode& node = computes.at(compute_index);
++            batch_inputs.push_back(node.input_nodes[1]);
++            batch_outputs.push_back(node.output_nodes[0]);
++            batch_steps.push_back(node.fhe_prop->p->rotation_step);
++        }
++
++        batch.input_nodes = std::move(batch_inputs);
++        batch.output_nodes = std::move(batch_outputs);
++        batch.fhe_prop->p->rotation_steps = std::move(batch_steps);
++        batch.id += "_hoisted_" + std::to_string(compute_indices.size());
++        ExecutorBinder::bind_executor(batch, Processor::GPU, algo);
++
++        computes_to_erase.insert(computes_to_erase.end(),
++                                 compute_indices.begin() + 1,
++                                 compute_indices.end());
++        ++batch_count;
++        grouped_rotation_count += compute_indices.size();
++    }
++
++    for (NodeIndex compute_index : computes_to_erase) {
++        computes.erase(compute_index);
++    }
++
++    // Erasing compute nodes invalidates their addresses. Rebuild every edge
++    // from the surviving node definitions before scheduling begins.
++    for (auto& [data_index, data_node] : data) {
++        data_node.predecessors.clear();
++        data_node.successors.clear();
++    }
++    for (auto& [compute_index, compute_node] : computes) {
++        for (DatumNode* input_node : compute_node.input_nodes) {
++            input_node->successors.push_back(&compute_node);
++        }
++        for (DatumNode* output_node : compute_node.output_nodes) {
++            output_node->predecessors.push_back(&compute_node);
++        }
++    }
++
++    std::fprintf(stderr,
++                 "[GPU Rotation Hoisting] enabled=1 batches=%zu "
++                 "grouped_rotations=%zu removed_compute_nodes=%zu\n",
++                 batch_count, grouped_rotation_count, computes_to_erase.size());
++    std::fflush(stderr);
++}
++
+ void MegaAG::compute_properties(ScheduleMode mode) {
+     compute_top_levels();
+     compute_bottom_levels();
+diff --git a/mega_ag_runners/mega_ag.h b/mega_ag_runners/mega_ag.h
+index 74f456d..53424d9 100644
+--- a/mega_ag_runners/mega_ag.h
++++ b/mega_ag_runners/mega_ag.h
+@@ -166,6 +166,7 @@ struct ComputeNode {
+ 
+         struct ExtraProperty {
+             int32_t rotation_step = 0;
++            std::vector<int32_t> rotation_steps;
+             int32_t sum_cnt = 0;
+         };
+         std::optional<ExtraProperty> p;
+@@ -308,6 +309,7 @@ private:
+ 
+     // Inserts ABI bridge nodes for the target processor and sets on_cpu for all compute nodes.
+     void apply_processor_layout();
++    void coalesce_gpu_rotation_siblings();
+ 
+     std::pair<NodeIndex, NodeIndex> get_next_indices() const;
+     void rebuild_bridge_relationships(std::initializer_list<OperationType> bridge_ops);

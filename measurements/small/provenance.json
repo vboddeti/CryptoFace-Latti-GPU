@@ -1,0 +1,88 @@
+{
+  "command": [
+    "/mnt/gs21/scratch/vishnu/cryptoface/reproducible/rotation-hoisting-v1/.venv/bin/python",
+    "-B",
+    "harness/run_submission.py",
+    "1",
+    "--num_runs",
+    "3",
+    "--seed",
+    "42"
+  ],
+  "prepared": {
+    "schema_version": 1,
+    "release_id": "fhe-face-gpu-v1",
+    "release_sha256": "22e377710155f06b8929827e6abe04634941c2a21ad0a4090d088890716f2e28",
+    "upstream_revision": "a7c12d34680bdd39198a349cf1ebeec89ae88061",
+    "backend_manifest_sha256": "d2a2912b64d264accbc11ec82ddaaa438ba1cb0479378bfb857f236c3da6322d",
+    "backend_build": "/mnt/gs21/scratch/vishnu/cryptoface/reproducible/converted-cache-analysis/ntt-generic-twiddle-package-rebuild-17442436",
+    "native": {
+      "binary_sha256": "0ec5f4c7058682cb98338c2e6cc0f8dc80808320c32687589570d559191ed72c",
+      "runtime_sha256": "d96acdf5cbbad79e03ea7bb1e0cfaeb4a507bde0ebef381a838d39715966d536"
+    },
+    "dataset_sha256": "fa11020b308a5f48d91942a49fe3235a452167603e3aed6d53c2320938f1cc7d",
+    "model_sha256": "dcc3bf9c4f5a5805666b5b46d244d50d0756636a8b0000765158e912b3eaec62",
+    "scratch_root": "/mnt/gs21/scratch/vishnu/cryptoface",
+    "source": "/mnt/gs21/scratch/vishnu/cryptoface/reproducible/fhe-face-gpu-v1-1-17508555/source",
+    "settings": {
+      "CRYPTOFACE_GPUS": "0,1,2,3",
+      "CRYPTOFACE_GPU_HOIST_ROTATIONS": "1",
+      "CRYPTOFACE_GPU_KEY_CACHE": "1",
+      "CRYPTOFACE_GPU_EVENT_CACHE": "0",
+      "CRYPTOFACE_STREAM_SCORING": "1",
+      "CRYPTOFACE_KEEP_STAGE_INPUTS": "0",
+      "CRYPTOFACE_FACE_CPU_THREADS": "8",
+      "LATTISENSE_GPU_SUBMISSION_THREADS": "4",
+      "HEONGPU_ROTATE_MANY_BATCH_INTT": "0",
+      "HEONGPU_ROTATE_MANY_SUFFIX_STREAMS": "1",
+      "LATTISENSE_GPU_PROFILE_HOT": "0",
+      "LATTISENSE_GPU_TIMING": "1",
+      "LATTISENSE_GPU_SYNC_DISABLE_TIMING": "0",
+      "LATTISENSE_GPU_SYNC_SHARE_BATCH_EVENT": "0",
+      "LATTISENSE_GPU_RECLAIM_THREADS": "0",
+      "LATTISENSE_GPU_PLAINTEXT_CACHE_MAX_BYTES": "0",
+      "LATTISENSE_GPU_CONVERTED_PLAINTEXT_MAX_BYTES": "0",
+      "LATTISENSE_GPU_HOST_KEY_CACHE_MAX_BYTES": "25769803776",
+      "LATTISENSE_GPU_IMMUTABLE_EVAL_KEYS": "1",
+      "LATTISENSE_GPU_ABI_CACHE_MAX_BYTES": "0",
+      "LATTISENSE_GPU_KEY_EXPORT_PROFILE": "0",
+      "LATTISENSE_GPU_TWIDDLE_SHOUP": "1",
+      "LATTISENSE_GPU_TWIDDLE_SHOUP_VERIFY": "0"
+    },
+    "prepared_utc": "2026-09-19T01:53:51.116139+00:00",
+    "inference_executed": false
+  },
+  "size": 1,
+  "repetitions": 3,
+  "seed": 42,
+  "gpu_inventory": "NVIDIA H200, GPU-e62f712b-5fc1-d734-bc17-230036730164, 580.173.02, 143771 MiB\nNVIDIA H200, GPU-ece2a6d3-5990-fc17-fc58-c6e787043469, 580.173.02, 143771 MiB\nNVIDIA H200, GPU-353d6b3a-e242-f0db-d5c0-70df5ed56d0e, 580.173.02, 143771 MiB\nNVIDIA H200, GPU-a0f73273-0b89-313a-2adf-b4d1a6d5cd4f, 580.173.02, 143771 MiB\n",
+  "slurm_job_id": "17508555",
+  "cwd": "/mnt/gs21/scratch/vishnu/cryptoface/reproducible/fhe-face-gpu-v1-1-17508555/source",
+  "core_dump_limit_bytes": 0,
+  "started_utc": "2026-09-19T01:53:58.130831+00:00",
+  "completed": true,
+  "results": [
+    {
+      "path": "measurements/small/results-1.json",
+      "sha256": "0f5837a0f454036512f4ac9389ccf09a5b6942ca3875ba243696ea02f68cb7fc",
+      "compute_seconds_per_pair": 3.777551620165468,
+      "harness_total_seconds": 4448.7102
+    },
+    {
+      "path": "measurements/small/results-2.json",
+      "sha256": "2f19e6a971cbc8d2802278a432c88e01babf2c430fd03222c806cae2b712b679",
+      "compute_seconds_per_pair": 3.7684509791179153,
+      "harness_total_seconds": 4103.2585
+    },
+    {
+      "path": "measurements/small/results-3.json",
+      "sha256": "044bd234082c03e016c2a857dcd579d7734dbbb8824127f71f02707017381cc9",
+      "compute_seconds_per_pair": 3.786074167383049,
+      "harness_total_seconds": 4309.064
+    }
+  ],
+  "finished_utc": "2026-09-19T05:21:04.786075+00:00",
+  "three_run_measurement_complete": true,
+  "benchmark_acceptance": "Pending organizer review; no automatic publication",
+  "mean_compute_seconds_per_pair": 3.777358922222144
+}
