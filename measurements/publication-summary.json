@@ -1,84 +1,52 @@
 {
-  "schema_version": 1,
-  "publication_status": "small-only submission; acceptance tracked by benchmark PR",
-  "intended_repository": "https://github.com/vboddeti/CryptoFace-Latti-GPU",
-  "intended_branch": "main",
-  "upstream_harness_commit": "a7c12d34680bdd39198a349cf1ebeec89ae88061",
-  "aggregation": "arithmetic mean of per-run metrics; not pooled quality; no setup subtraction",
-  "variants": {
+  "publication_release_sha256": "d7d34babf3c887c06300b64df1d768626d891049c69f9ab9bba8cf9cf86bd6d5",
+  "measured_release_sha256": "6e008fbefd298711030422fe5cebe4956d1b2898bb362073176f42f685e4cda9",
+  "upstream_harness_revision": "a7c12d34680bdd39198a349cf1ebeec89ae88061",
+  "matching_correctness": {
+    "passed": true,
+    "pairs": 1,
+    "absolute_tolerance": 1e-06,
+    "max_absolute_error": 6.003887387251439e-10,
+    "reference": "unchanged encrypted CPU inner product on identical ciphertexts"
+  },
+  "workloads": {
+    "single": {
+      "pairs_per_run": 1,
+      "num_runs": 3,
+      "encrypted_compute_seconds_per_run": [
+        14.902272939012619,
+        14.098505391011713,
+        13.84915295400424
+      ],
+      "encrypted_compute_seconds_per_pair": [
+        14.902272939012619,
+        14.098505391011713,
+        13.84915295400424
+      ],
+      "mean_encrypted_compute_seconds_per_run": 14.283310428009523,
+      "mean_encrypted_compute_seconds_per_pair": 14.283310428009523,
+      "mean_harness_encrypted_stage_seconds_per_pair": 159.38986666666668,
+      "mean_harness_total_seconds": 554.0302333333334,
+      "all_small_quality_checks_passed": null
+    },
     "small": {
-      "variant": "small",
       "pairs_per_run": 128,
       "num_runs": 3,
-      "completed_utc": "2026-09-19T05:21:04.786075+00:00",
-      "slurm_job_id": "17508555",
-      "release_sha256": "22e377710155f06b8929827e6abe04634941c2a21ad0a4090d088890716f2e28",
-      "dataset_sha256": "fa11020b308a5f48d91942a49fe3235a452167603e3aed6d53c2320938f1cc7d",
-      "native": {
-        "binary_sha256": "0ec5f4c7058682cb98338c2e6cc0f8dc80808320c32687589570d559191ed72c",
-        "runtime_sha256": "d96acdf5cbbad79e03ea7bb1e0cfaeb4a507bde0ebef381a838d39715966d536"
-      },
-      "bandwidth_reported": {
-        "Public and evaluation keys": "7.6G",
-        "Packed model weights": "15.9M",
-        "Encrypted input": "11.9G",
-        "Encrypted results": "200.0M"
-      },
-      "mean_harness_seconds": {
-        "Test dataset generation": 1.3968,
-        "Key Generation": 214.3882,
-        "Encrypted model preprocessing": 3.2457,
-        "Input generation": 1.7172,
-        "Input preprocessing": 645.8185333333333,
-        "Input encryption": 241.60856666666666,
-        "Encrypted computation": 634.1958666666667,
-        "Result decryption": 106.03576666666667,
-        "Result postprocessing": 2.3433333333333333,
-        "Harness: Run inference for harness plaintext model": 2436.2574999999997,
-        "Harness: Run quality check": 0.0033666666666666667,
-        "Offline setup total": 219.0308,
-        "Online evaluation total": 4067.9800999999998,
-        "Total": 4287.0109
-      },
-      "mean_server_seconds": {
-        "Total": 628.5550646600313,
-        "Encrypted computation": 483.50194204443443
-      },
-      "mean_compute_seconds_per_pair": 3.777358922222144,
-      "quality_mean_of_runs": {
-        "Encrypted model quality": {
-          "eer": 0.06894736842105265,
-          "tar_at_far_1pct": 0.8443274853801169,
-          "tar_at_far_01pct": 0.8443274853801169
-        },
-        "Harness model quality": {
-          "eer": 0.06309941520467839,
-          "tar_at_far_1pct": 0.9369005847953216,
-          "tar_at_far_01pct": 0.9369005847953216
-        }
-      },
-      "raw_results": [
-        {
-          "file": "measurements/small/results-1.json",
-          "sha256": "0f5837a0f454036512f4ac9389ccf09a5b6942ca3875ba243696ea02f68cb7fc",
-          "compute_seconds_per_pair": 3.777551620165468
-        },
-        {
-          "file": "measurements/small/results-2.json",
-          "sha256": "2f19e6a971cbc8d2802278a432c88e01babf2c430fd03222c806cae2b712b679",
-          "compute_seconds_per_pair": 3.7684509791179153
-        },
-        {
-          "file": "measurements/small/results-3.json",
-          "sha256": "044bd234082c03e016c2a857dcd579d7734dbbb8824127f71f02707017381cc9",
-          "compute_seconds_per_pair": 3.786074167383049
-        }
-      ]
+      "encrypted_compute_seconds_per_run": [
+        487.8749099819979,
+        489.06532363200677,
+        483.909056014003
+      ],
+      "encrypted_compute_seconds_per_pair": [
+        3.8115227342343587,
+        3.820822840875053,
+        3.7805395001093984
+      ],
+      "mean_encrypted_compute_seconds_per_run": 486.9497632093359,
+      "mean_encrypted_compute_seconds_per_pair": 3.804295025072937,
+      "mean_harness_encrypted_stage_seconds_per_pair": 4.97292578125,
+      "mean_harness_total_seconds": 3878.4565333333335,
+      "all_small_quality_checks_passed": true
     }
-  },
-  "not_reported": {
-    "single": "outside this submission",
-    "medium": "outside this submission",
-    "large": "not measured with this release"
   }
 }

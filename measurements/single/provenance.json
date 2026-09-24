@@ -3,7 +3,7 @@
     "/mnt/gs21/scratch/vishnu/cryptoface/reproducible/rotation-hoisting-v1/.venv/bin/python",
     "-B",
     "harness/run_submission.py",
-    "1",
+    "0",
     "--num_runs",
     "3",
     "--seed",
@@ -24,7 +24,7 @@
     "dataset_sha256": "fa11020b308a5f48d91942a49fe3235a452167603e3aed6d53c2320938f1cc7d",
     "model_sha256": "dcc3bf9c4f5a5805666b5b46d244d50d0756636a8b0000765158e912b3eaec62",
     "scratch_root": "/mnt/gs21/scratch/vishnu/cryptoface",
-    "source": "/mnt/gs21/scratch/vishnu/cryptoface/reproducible/gpu-matching-v2-small-17665077/source",
+    "source": "/mnt/gs21/scratch/vishnu/cryptoface/reproducible/gpu-matching-v2-single-17663993/source",
     "settings": {
       "CRYPTOFACE_GPUS": "0,1,2,3",
       "CRYPTOFACE_GPU_HOIST_ROTATIONS": "1",
@@ -50,49 +50,41 @@
       "LATTISENSE_GPU_TWIDDLE_SHOUP": "1",
       "LATTISENSE_GPU_TWIDDLE_SHOUP_VERIFY": "0"
     },
-    "prepared_utc": "2026-09-24T02:18:21.709581+00:00",
+    "prepared_utc": "2026-09-24T01:57:27.584968+00:00",
     "inference_executed": false
   },
-  "size": 1,
+  "size": 0,
   "matching_diagnostic": false,
   "repetitions": 3,
   "seed": 42,
   "gpu_inventory": "NVIDIA H200, GPU-fad8af65-f608-19aa-29e0-504e4723ddf0, 580.173.02, 143771 MiB\nNVIDIA H200, GPU-b0acc1a1-d5d2-0d9a-f25d-072effcf07d6, 580.173.02, 143771 MiB\nNVIDIA H200, GPU-5a0212d0-9f94-be17-de24-f8a788f4fcbc, 580.173.02, 143771 MiB\nNVIDIA H200, GPU-47d84c34-b041-a6b6-8440-e2a0e436da6e, 580.173.02, 143771 MiB\n",
-  "slurm_job_id": "17665077",
-  "cwd": "/mnt/gs21/scratch/vishnu/cryptoface/reproducible/gpu-matching-v2-small-17665077/source",
+  "slurm_job_id": "17663993",
+  "cwd": "/mnt/gs21/scratch/vishnu/cryptoface/reproducible/gpu-matching-v2-single-17663993/source",
   "core_dump_limit_bytes": 0,
-  "started_utc": "2026-09-24T02:18:23.690915+00:00",
+  "started_utc": "2026-09-24T01:57:29.572925+00:00",
   "completed": true,
   "results": [
     {
-      "path": "measurements/small/results-1.json",
-      "sha256": "0ca14f32c44c848943a5b4451cb839b4a06129f8674303301839144a47c67d08",
-      "compute_seconds_per_pair": 3.8115227342343587,
-      "harness_total_seconds": 3861.2927
+      "path": "measurements/single/results-1.json",
+      "sha256": "43133fb8093d7d2c0f5a03e25da94d220727754c22b1c4a5be28bc97cb3c9acd",
+      "compute_seconds_per_pair": 14.902272939012619,
+      "harness_total_seconds": 564.1272
     },
     {
-      "path": "measurements/small/results-2.json",
-      "sha256": "41b2132cb4e81d4365fd30766e804b74c4b099a823956de583f3f1d9397a9bdc",
-      "compute_seconds_per_pair": 3.820822840875053,
-      "harness_total_seconds": 3952.5334
+      "path": "measurements/single/results-2.json",
+      "sha256": "9446de22535e2d115defc99ff7f02622b29d7b38ea2ad9455e8588802dbfa50c",
+      "compute_seconds_per_pair": 14.098505391011713,
+      "harness_total_seconds": 550.6275
     },
     {
-      "path": "measurements/small/results-3.json",
-      "sha256": "80f0afb24870a71d8c6ef5dc85f2f8ca401fa6a29345aac223bd67b129b0541f",
-      "compute_seconds_per_pair": 3.7805395001093984,
-      "harness_total_seconds": 3821.5435
+      "path": "measurements/single/results-3.json",
+      "sha256": "b0a594a76c76219a958ccdcc329562f3c8d77e8df0eeb739d3bffe60f245a033",
+      "compute_seconds_per_pair": 13.84915295400424,
+      "harness_total_seconds": 547.336
     }
   ],
-  "finished_utc": "2026-09-24T05:25:27.798305+00:00",
+  "finished_utc": "2026-09-24T02:17:42.942679+00:00",
   "three_run_measurement_complete": true,
   "benchmark_acceptance": "Pending organizer review; no automatic publication",
-  "mean_compute_seconds_per_pair": 3.804295025072937,
-  "scheduling_policy": {
-    "reason": "User requested small not wait for the official single benchmark",
-    "scope": "small only; medium and large predecessor requirements unchanged",
-    "local_correctness": "/mnt/gs21/scratch/vishnu/cryptoface/reproducible/gpu-matching-v2-check-local-20260923d/completed.json",
-    "local_correctness_sha256": "83c5652274953703315ed8f6bf6ebf8bed88e4cfa4be048304f9dbed428eb364",
-    "runner_sha256": "5d1fcf38c66c459423e4db5f4fd0c8ec8132f2faa62e1f60e90ddbb915a94b54",
-    "numerical_source_and_validation_unchanged": true
-  }
+  "mean_compute_seconds_per_pair": 14.283310428009523
 }

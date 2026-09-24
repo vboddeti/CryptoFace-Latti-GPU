@@ -39,11 +39,14 @@ class ContractTests(unittest.TestCase):
             relative = f'submission/latti/model/{side}/ckks_parameter.json'
             self.assertEqual((ROOT / relative).read_bytes(), (ROOT / 'backend/base/code' / relative).read_bytes())
 
-    def test_only_three_adapter_files_differ_from_captured_submission(self):
+    def test_only_expected_adapter_and_matching_files_differ(self):
         base = ROOT / 'backend/base/code/submission'
         changed = {p.relative_to(base).as_posix() for p in base.rglob('*')
                    if p.is_file() and p.read_bytes() != (ROOT / 'submission' / p.relative_to(base)).read_bytes()}
-        self.assertEqual(changed, {'gpu_runtime.py', 'client_key_generation.py', 'server_preprocess_model.py'})
+        self.assertEqual(changed, {'gpu_runtime.py', 'client_key_generation.py', 'server_preprocess_model.py',
+                                  'client_decrypt_decode.py', 'server_encrypted_compute.py',
+                                  'test_streamed_encrypted_compute.py', 'test_gpu_runtime.py',
+                                  'native/build_runtime.sh', 'native/latti_stage_runtime.cpp'})
 
     def test_timing_units(self):
         self.assertAlmostEqual(benchmark.seconds('955.6222885912284s'), 955.6222885912284)

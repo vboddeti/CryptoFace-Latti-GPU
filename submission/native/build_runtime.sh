@@ -30,6 +30,7 @@ cp "${LATTI_AI_SOURCE}/inference/interface/inference_client.cpp" "${WORK}/infere
 cp "${LATTI_AI_SOURCE}/inference/interface/inference_server.h" "${WORK}/inference/interface/"
 cp "${LATTI_AI_SOURCE}/inference/interface/inference_server.cpp" "${WORK}/inference/interface/"
 patch -d "${WORK}" -p1 < "${ROOT}/submission/native/latti-stage-interface.patch"
+patch -d "${WORK}" -p1 < "${ROOT}/submission/native/latti-gpu-matching.patch"
 
 COMMON_FLAGS=(
   -maes -fopenmp -O3 -DNDEBUG -std=gnu++20 -fPIC

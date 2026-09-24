@@ -1,0 +1,16 @@
+{
+  "measured_release_sha256": "6e008fbefd298711030422fe5cebe4956d1b2898bb362073176f42f685e4cda9",
+  "publication_release_sha256": "d7d34babf3c887c06300b64df1d768626d891049c69f9ab9bba8cf9cf86bd6d5",
+  "measured_executable_and_backend_files_unchanged": true,
+  "documentation_changes": [
+    "README.md simplified",
+    "GPU_MATCHING.md omitted"
+  ],
+  "additional_publication_tools": [
+    "scripts/run_independent_small.py",
+    "scripts/run_validated_gpu_matching_slurm.sh",
+    "scripts/test_independent_small.py",
+    "scripts/summarize_publication.py"
+  ],
+  "measured_manifest": "measurements/small/release.json"
+}

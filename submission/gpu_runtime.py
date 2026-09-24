@@ -462,8 +462,13 @@ def server_command(eval_context: Path, task_dir: Path) -> list[str]:
 
 
 def scorer_command(eval_context: Path, task_dir: Path) -> list[str]:
-    return [
+    command = [
         str(NATIVE_BINARY), "scorer",
         "--task-dir", str(task_dir),
         "--eval-context", str(eval_context),
+        "--gpu", "--gpu-device", "0",
+        "--matching-task", str(SUBMISSION_BUILD_DIR.resolve().parent / "matching-task"),
     ]
+    if os.environ.get("CRYPTOFACE_VERIFY_GPU_MATCHING") == "1":
+        command.append("--verify-gpu-matching")
+    return command

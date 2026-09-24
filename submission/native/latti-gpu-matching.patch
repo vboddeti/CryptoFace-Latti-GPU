@@ -1,0 +1,105 @@
+--- a/inference/interface/inference_server.h
++++ b/inference/interface/inference_server.h
+@@ -21,5 +21,7 @@
+ #include <memory>
+ 
++#include <cmath>
++#include "cxx_sdk_v2/cxx_fhe_task.h"
+ #include "data_structs/feature.h"
+ #include "inference_task/inference_process.h"
+ #include "interface/inference_client.h"
+@@ -62,5 +63,13 @@
+     Bytes compute_inner_product(const Bytes& left, const Bytes& right,
+                                 int embedding_dim = 256) const;
+ 
++    Bytes compute_inner_product_gpu(const Bytes& left, const Bytes& right,
++                                    int embedding_dim, const std::string& task_path,
++                                    int device);
++private:
++    std::unique_ptr<ls::FheTaskGpu> gpu_matching_task_;
++    std::string gpu_matching_task_path_;
++public:
++
+     /// Run plaintext inference on CSV input files (for verification).
+     std::map<std::string, std::vector<double>> evaluate_plaintext(const std::map<std::string, std::string>& input_csvs);
+--- a/inference/interface/inference_server.cpp
++++ b/inference/interface/inference_server.cpp
+@@ -54,1 +54,1 @@
+-InferenceServer::~InferenceServer() = default;
++InferenceServer::~InferenceServer() { gpu_matching_task_.reset(); }
+@@ -255,3 +255,75 @@
+ 
++Bytes InferenceServer::compute_inner_product_gpu(const Bytes& left_bytes,
++                                                const Bytes& right_bytes,
++                                                int embedding_dim,
++                                                const std::string& task_path,
++                                                int device) {
++    if (context_ptr_ == nullptr || task_path.empty()) {
++        throw std::runtime_error("Missing public context or GPU matching task");
++    }
++    Feature0DEncrypted left(context_ptr_, 0), right(context_ptr_, 0);
++    left.deserialize(left_bytes);
++    right.deserialize(right_bytes);
++    // This circuit is pinned to the unchanged production embedding layout.
++    for (const auto* feature : {&left, &right}) {
++        if (embedding_dim != 256 || feature->n_channel != 256 ||
++            feature->n_channel_per_ct != 32 || feature->skip != 1024 ||
++            feature->data.size() != 8) {
++            throw std::runtime_error("Unexpected GPU matching layout");
++        }
++        for (const auto& ct : feature->data) {
++            if (ct.get_level() != 2) {
++                throw std::runtime_error("Unexpected GPU matching input level");
++            }
++        }
++    }
++    if (!gpu_matching_task_) {
++        gpu_matching_task_ = std::make_unique<ls::FheTaskGpu>(task_path);
++        gpu_matching_task_path_ = task_path;
++    } else if (gpu_matching_task_path_ != task_path) {
++        throw std::runtime_error("GPU matching task changed during session");
++    }
++    const double scale = context_ptr_->get_parameter().get_default_scale();
++    const double left_scale = left.data.front().get_scale();
++    const double right_scale = right.data.front().get_scale();
++    const double divisor = static_cast<double>(context_ptr_->get_parameter().get_q(2));
++    const double output_scale = left_scale * right_scale / divisor;
++    if (!std::isfinite(left_scale) || left_scale <= 0.0 ||
++        !std::isfinite(right_scale) || right_scale <= 0.0 ||
++        !std::isfinite(output_scale) || output_scale < scale) {
++        throw std::runtime_error("Invalid GPU matching CKKS scales");
++    }
++    for (size_t index = 0; index < left.data.size(); ++index) {
++        if (left.data[index].get_scale() != left_scale ||
++            right.data[index].get_scale() != right_scale) {
++            throw std::runtime_error("GPU matching requires uniform input scales");
++        }
++    }
++    std::vector<ls::CkksCiphertext> result;
++    result.push_back(context_ptr_->new_ciphertext(1, scale));
++    std::vector<ls::CxxVectorArgument> arguments = {
++        {"left", &left.data}, {"right", &right.data}, {"score", &result}};
++    gpu_matching_task_->run(context_ptr_, arguments, nullptr, device);
++    if (result.size() != 1 || result.front().get_level() != 1) {
++        throw std::runtime_error("Unexpected GPU matching output layout");
++    }
++    // Frozen GPU import initializes scale from the context, ignoring the
++    // ciphertext metadata. Coefficients still undergo the same one-prime
++    // rescale. Restore their actual scale from the original input metadata,
++    // never from plaintext values or an empirical correction factor.
++    // Reject inputs for which the CPU min-scale rescale would drop twice.
++    if (output_scale / context_ptr_->get_parameter().get_q(1) >= scale / 2.0) {
++        throw std::runtime_error("GPU matching requires exactly one rescale");
++    }
++    result.front().set_scale(output_scale);
++    Feature0DEncrypted output(context_ptr_, 1);
++    output.n_channel = 1;
++    output.n_channel_per_ct = 1;
++    output.skip = left.skip;
++    output.ckks_scale = output_scale;
++    output.data = std::move(result);
++    return output.serialize();
++}
++
+ std::map<std::string, std::vector<double>>
+ InferenceServer::evaluate_plaintext(const std::map<std::string, std::string>& input_csvs) {

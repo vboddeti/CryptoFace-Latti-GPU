@@ -54,6 +54,7 @@ class _FakeNativeSession:
                 "id": payload["id"],
                 "ok": True,
                 "matching_seconds": 0.005,
+                "matching_backend": "gpu",
                 "native_timing_seconds": {
                     "ciphertext_input_read": 0.001,
                     "fhe_inner_product": 0.003,

@@ -158,8 +158,7 @@ def main() -> None:
         )
         for gpu in physical_gpus
     ]
-    scorer_env = runtime_environment()
-    scorer_env["CUDA_VISIBLE_DEVICES"] = ""
+    scorer_env = runtime_environment(physical_gpus[0])
     scorer = NativeSession(
         scorer_command(eval_context, task_dir),
         env=scorer_env,
@@ -169,7 +168,7 @@ def main() -> None:
     preparation_finished = time.monotonic()
     print(
         f"[server_encrypted_compute] Starting {len(sessions)} persistent GPU workers "
-        f"on physical GPUs {physical_gpus} and one public-context CPU scorer",
+        f"on physical GPUs {physical_gpus} and one public-context GPU scorer",
         flush=True,
     )
     setup_started = time.monotonic()
@@ -210,6 +209,8 @@ def main() -> None:
         def score_dispatch(payload: dict, submitted_at: float) -> dict:
             dispatch_started = time.monotonic()
             response = scorer.request(payload)
+            if response.get("matching_backend") != "gpu":
+                raise RuntimeError("GPU matching required; CPU fallback is forbidden")
             dispatch_finished = time.monotonic()
             response["scorer_dispatch_timing_seconds"] = {
                 "executor_queue_wait": dispatch_started - submitted_at,
@@ -396,6 +397,8 @@ def main() -> None:
             "GPU key cache": os.environ.get("CRYPTOFACE_GPU_KEY_CACHE", "1"),
             "GPU event cache": os.environ.get("CRYPTOFACE_GPU_EVENT_CACHE", "1"),
             "Scorer startup": scorer.startup_seconds,
+            "Matching backend": "gpu",
+            "Matching physical GPU": physical_gpus[0],
             "Throughput": {
                 "images_per_second_during_inference": (
                     2 * pair_count

@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=64
 #SBATCH --gres=gpu:h200:4
 #SBATCH --mem=640G
-#SBATCH --time=06:00:00
+#SBATCH --time=03:55:00
 #SBATCH --partition=general-short
 #SBATCH --chdir=/mnt/gs21/scratch/vishnu/cryptoface
 #SBATCH --output=/mnt/gs21/scratch/vishnu/cryptoface/slurm-logs/%x-%j.out

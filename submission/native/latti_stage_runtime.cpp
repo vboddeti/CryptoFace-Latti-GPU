@@ -25,6 +25,8 @@ struct Arguments {
     string secret_out;
     string eval_out;
     bool use_gpu = false;
+    string matching_task;
+    bool verify_gpu_matching = false;
     int gpu_device = 0;
 };
 
@@ -48,6 +50,8 @@ Arguments parse_arguments(int argc, char** argv) {
         else if (option == "--secret-out") args.secret_out = value();
         else if (option == "--eval-out") args.eval_out = value();
         else if (option == "--gpu") args.use_gpu = true;
+        else if (option == "--matching-task") args.matching_task = value();
+        else if (option == "--verify-gpu-matching") args.verify_gpu_matching = true;
         else if (option == "--gpu-device") args.gpu_device = stoi(value());
         else throw runtime_error("unknown argument: " + option);
     }
@@ -254,8 +258,8 @@ int run_scorer(const Arguments& args) {
 
     // The scorer intentionally imports only the public evaluation context. It
     // neither loads the encrypted embedding model nor receives a secret key.
-    // Running it as a separate CPU process lets scalar encrypted matching
-    // overlap GPU embedding inference without occupying a GPU worker.
+    // A separate public-only GPU task executes matching. CPU execution is kept
+    // only as the unchanged reference for isolated, non-benchmark validation.
     const auto startup_started = chrono::steady_clock::now();
     InferenceServer server(args.task_dir + "/server", false, 0);
     const auto construct_finished = chrono::steady_clock::now();
@@ -293,9 +297,18 @@ int run_scorer(const Arguments& args) {
             const Bytes right = read_bytes(request.at("right").get<string>());
             const auto input_read_finished = chrono::steady_clock::now();
             const int dimension = request.value("embedding_dim", 256);
-            Bytes output = server.compute_inner_product(left, right, dimension);
+            Bytes output = args.use_gpu
+                ? server.compute_inner_product_gpu(left, right, dimension,
+                                                    args.matching_task, args.gpu_device)
+                : server.compute_inner_product(left, right, dimension);
             const auto evaluate_finished = chrono::steady_clock::now();
             write_bytes(request.at("output").get<string>(), output);
+            response["matching_backend"] = args.use_gpu ? "gpu" : "cpu";
+            if (args.verify_gpu_matching) {
+                if (!args.use_gpu) throw runtime_error("Matching validation requires GPU mode");
+                const auto reference = server.compute_inner_product(left, right, dimension);
+                write_bytes(request.at("output").get<string>() + ".cpu-reference.ct", reference);
+            }
             const auto output_write_finished = chrono::steady_clock::now();
             response["matching_seconds"] = seconds_between(started, output_write_finished);
             response["native_timing_seconds"] = {

@@ -1,103 +1,93 @@
 #!/usr/bin/env python3
-"""Read-only publication audit; stdout is a final JSON summary, never runtime data."""
+"""Verify published raw results against measured-source provenance; print means."""
+import argparse
 import hashlib
-import importlib.util
 import json
-import math
 from pathlib import Path
-import re
 from statistics import mean
-
-REPO = Path(__file__).resolve().parents[1]
-TARGET = 'https://github.com/vboddeti/CryptoFace-Latti-GPU'
-BRANCH = 'main'
-
-
-def sha(path):
-    with path.open('rb') as stream:
-        return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
 def load(path):
     return json.loads(path.read_text())
 
 
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def seconds(value):
-    match = re.fullmatch(r'([0-9]+(?:\.[0-9]+)?)(ms|s|m|h)', value)
-    if not match:
-        raise ValueError(f'Unexpected time: {value}')
-    result = float(match[1]) * {'ms': .001, 's': 1, 'm': 60, 'h': 3600}[match[2]]
-    if not math.isfinite(result) or result < 0:
-        raise ValueError('Invalid timing')
-    return result
+    return float(value.removesuffix('s'))
 
 
-def summarize(variant, size, count, pairs):
-    directory = REPO / 'measurements' / variant
-    evidence = load(directory / 'provenance.json')
-    assert evidence['completed'] is True
-    assert evidence['size'] == size and evidence['repetitions'] == count
-    assert evidence['three_run_measurement_complete'] is (count == 3)
-    assert evidence['command'][-4:] == ['--num_runs', str(count), '--seed', '42']
-    assert evidence['prepared']['release_sha256'] == sha(REPO / 'release.json')
-    assert sha(directory / 'release.json') == sha(REPO / 'release.json')
-    assert len(evidence['results']) == count
-    results = []
-    identities = []
-    for number, recorded in enumerate(evidence['results'], start=1):
-        path = directory / f'results-{number}.json'
-        assert recorded['path'] == f'measurements/{variant}/{path.name}'
-        assert sha(path) == recorded['sha256']
-        result = load(path)
-        server = result['Server Reported']
-        assert server['additional_measurements']['Pair count'] == pairs
-        assert server['additional_measurements']['workers']['gpu_count'] == 4
-        compute = seconds(server['Encrypted computation']) / pairs
-        assert math.isclose(compute, recorded['compute_seconds_per_pair'], rel_tol=1e-12)
-        assert math.isclose(seconds(result['Timing']['Total']), recorded['harness_total_seconds'], rel_tol=1e-12)
-        if count == 3:
-            assert result['Quality']['Comparison to ArcFace baseline']['passed'] is True
-        else:
-            assert math.isfinite(result['Quality']['Encrypted model quality']['score'])
-        results.append(result)
-        identities.append({'file': f'measurements/{variant}/{path.name}',
-                           'sha256': sha(path), 'compute_seconds_per_pair': compute})
-    assert all(result['Bandwidth'] == results[0]['Bandwidth'] for result in results)
-    timing = {key: mean(seconds(r['Timing'][key]) for r in results)
-              for key in results[0]['Timing']}
-    server = {key: mean(seconds(r['Server Reported'][key]) for r in results)
-              for key in ('Total', 'Encrypted computation')}
-    quality = ({model: {key: mean(r['Quality'][model][key] for r in results)
-                         for key in ('eer', 'tar_at_far_1pct', 'tar_at_far_01pct')}
-                for model in ('Encrypted model quality', 'Harness model quality')}
-               if count == 3 else results[0]['Quality'])
-    return {'variant': variant, 'pairs_per_run': pairs, 'num_runs': count,
-            'completed_utc': evidence['finished_utc'], 'slurm_job_id': evidence['slurm_job_id'],
-            'release_sha256': evidence['prepared']['release_sha256'],
-            'dataset_sha256': evidence['prepared']['dataset_sha256'],
-            'native': evidence['prepared']['native'],
-            'bandwidth_reported': results[0]['Bandwidth'],
-            'mean_harness_seconds': timing, 'mean_server_seconds': server,
-            'mean_compute_seconds_per_pair': server['Encrypted computation'] / pairs,
-            'quality_mean_of_runs': quality, 'raw_results': identities}
-
-
-def main():
-    spec = importlib.util.spec_from_file_location('measured_benchmark', REPO / 'scripts/benchmark.py')
-    benchmark = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(benchmark)
-    benchmark.verify_release(REPO)
-    variants = {'small': summarize('small', 1, 3, 128)}
-    output = {'schema_version': 1, 'publication_status': 'small-only submission; acceptance tracked by benchmark PR',
-              'intended_repository': TARGET, 'intended_branch': BRANCH,
-              'upstream_harness_commit': load(REPO / 'release.json')['upstream_revision'],
-              'aggregation': 'arithmetic mean of per-run metrics; not pooled quality; no setup subtraction',
-              'variants': variants,
-              'not_reported': {'single': 'outside this submission',
-                               'medium': 'outside this submission',
-                               'large': 'not measured with this release'}}
-    print(json.dumps(output, indent=2, allow_nan=False))
+def summarize(root):
+    source = root
+    release = load(source / 'release.json')
+    release_hash = digest(source / 'release.json')
+    for name, expected in release['files'].items():
+        if digest(source / name) != expected:
+            raise ValueError(f'Measured source changed: {name}')
+    measured_path = root / 'measurements/small/release.json'
+    measured = load(measured_path)
+    measured_hash = digest(measured_path)
+    for name, expected in measured['files'].items():
+        if name not in ('README.md', 'GPU_MATCHING.md') and digest(root / name) != expected:
+            raise ValueError(f'Measured executable/backend source differs: {name}')
+    diagnostic = load(root / 'measurements/validation/provenance.json')
+    check = diagnostic['matching_validation']
+    if (not diagnostic['completed'] or not diagnostic['matching_diagnostic']
+            or check['passed'] is not True or check['absolute_tolerance'] != 1e-6
+            or check['pairs'] != 1 or check['max_absolute_error'] > 1e-6):
+        raise ValueError('Missing matching correctness evidence')
+    summary = {'publication_release_sha256': release_hash,
+               'measured_release_sha256': measured_hash,
+               'upstream_harness_revision': release['upstream_revision'],
+               'matching_correctness': check, 'workloads': {}}
+    for name, pairs in [('single', 1), ('small', 128)]:
+        folder = root / 'measurements' / name
+        provenance = load(folder / 'provenance.json')
+        if (provenance['completed'] is not True or provenance['repetitions'] != 3
+                or provenance['matching_diagnostic']
+                or provenance['three_run_measurement_complete'] is not True
+                or len(provenance['results']) != 3):
+            raise ValueError(f'Incomplete official runset: {name}')
+        if provenance['prepared']['release_sha256'] != measured_hash:
+            raise ValueError('Results belong to another release')
+        for key in ('release_sha256', 'native', 'dataset_sha256', 'settings'):
+            if provenance['prepared'][key] != diagnostic['prepared'][key]:
+                raise ValueError(f'Diagnostic identity differs: {key}')
+        results = []
+        for index, evidence in enumerate(provenance['results'], 1):
+            path = folder / f'results-{index}.json'
+            if evidence['path'] != f'measurements/{name}/results-{index}.json':
+                raise ValueError('Unexpected raw-result mapping')
+            if digest(path) != evidence['sha256']:
+                raise ValueError(f'Raw result changed: {path}')
+            result = load(path)
+            details = result['Server Reported']['additional_measurements']
+            if details['Matching backend'] != 'gpu' or details['Pair count'] != pairs:
+                raise ValueError('Wrong matching backend or workload size')
+            if name == 'small' and result['Quality']['Comparison to ArcFace baseline']['passed'] is not True:
+                raise ValueError('Benchmark quality gate failed')
+            results.append(result)
+        compute = [seconds(r['Server Reported']['Encrypted computation']) for r in results]
+        summary['workloads'][name] = {
+            'pairs_per_run': pairs, 'num_runs': 3,
+            'encrypted_compute_seconds_per_run': compute,
+            'encrypted_compute_seconds_per_pair': [v / pairs for v in compute],
+            'mean_encrypted_compute_seconds_per_run': mean(compute),
+            'mean_encrypted_compute_seconds_per_pair': mean(compute) / pairs,
+            'mean_harness_encrypted_stage_seconds_per_pair': mean(seconds(r['Timing']['Encrypted computation']) for r in results) / pairs,
+            'mean_harness_total_seconds': mean(seconds(r['Timing']['Total']) for r in results),
+            'all_small_quality_checks_passed': True if name == 'small' else None,
+        }
+    policy = load(root / 'measurements/small/provenance.json')['scheduling_policy']
+    if digest(root / 'scripts/run_independent_small.py') != policy['runner_sha256']:
+        raise ValueError('Independent-small orchestration source changed')
+    return summary
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
+    args = parser.parse_args()
+    print(json.dumps(summarize(args.root), indent=2))

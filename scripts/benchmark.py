@@ -88,6 +88,14 @@ def scratch_path(path, scratch):
 
 
 def verify_backend(build, scratch, root=ROOT):
+    if (build / 'gpu-matching-build.json').is_file():
+        builder = module(root / 'scripts/build_gpu_matching.py', 'matching_builder')
+        builder.ROOT = root
+        return builder.verify(build, scratch)
+    raise ValueError('This release requires a verified GPU matching build')
+
+
+def verify_original_backend(build, scratch, root=ROOT):
     replay = module(root / 'backend/replay.py', 'fhe_backend_verifier')
     replay.SCRATCH = scratch.resolve(strict=True)
     manifest = replay.verify_package(root / 'backend')
@@ -181,6 +189,8 @@ def assess_results(source, size, repetitions):
         path = source / 'measurements' / NAMES[size] / f'results-{number}.json'
         result = load(path)
         reported = result['Server Reported']
+        if reported['additional_measurements'].get('Matching backend') != 'gpu':
+            raise ValueError('Result does not prove GPU matching execution')
         if reported['additional_measurements']['Pair count'] != PAIRS[size]:
             raise ValueError('Reported pair count does not match the upstream workload')
         if size and result['Quality']['Comparison to ArcFace baseline']['passed'] is not True:
@@ -195,6 +205,8 @@ def assess_results(source, size, repetitions):
 
 def check_previous(path, prepared, size):
     previous = load(path)
+    if previous.get('repetitions') != 3 or previous.get('matching_diagnostic'):
+        raise ValueError('Previous workload must be an official three-run measurement')
     if previous.get('completed') is not True or previous.get('size') != size - 1:
         raise ValueError('Require a successful preceding smaller workload')
     for key in ('release_sha256', 'native', 'dataset_sha256', 'settings'):
@@ -218,21 +230,37 @@ def run(args):
     if native != prepared['native']:
         raise ValueError('Prepared native binaries changed')
     verify_inputs(source / 'datasets/face_dataset.h5', manifest)
-    if args.size >= 2:
+    if args.size >= 1:
         if args.previous is None:
-            raise ValueError('Medium requires small; large requires medium, with unchanged identities')
+            raise ValueError('Require preceding smaller three-run workload with unchanged identities')
         check_previous(args.previous.resolve(strict=True), prepared, args.size)
     if (work / 'run-started.json').exists() or (source / 'measurements').exists():
         raise ValueError('Never rerun or overwrite an existing measurement directory')
     repetitions = 1 if args.smoke else 3
+    if args.matching_check and not args.smoke:
+        raise ValueError('CPU comparison is diagnostic only, not a benchmark')
     if args.smoke and args.size != 0:
         raise ValueError('Smoke mode is only for one real pair; official batches use three runs')
     env = execution_environment(work, release['settings'])
+    if args.matching_check:
+        env['CRYPTOFACE_VERIFY_GPU_MATCHING'] = '1'
+    else:
+        if args.matching_validation is None:
+            raise ValueError('GPU matching numerical validation must precede benchmarks')
+        validation = load(args.matching_validation)
+        if (not validation.get('completed') or not validation.get('matching_diagnostic')
+                or validation.get('matching_validation', {}).get('passed') is not True
+                or validation['matching_validation'].get('absolute_tolerance') != 1e-6):
+            raise ValueError('Missing successful unchanged-tolerance GPU matching check')
+        for key in ('release_sha256', 'native', 'dataset_sha256', 'settings'):
+            if validation['prepared'][key] != prepared[key]:
+                raise ValueError(f'Matching validation identity differs: {key}')
     command = [sys.executable, '-B', 'harness/run_submission.py', str(args.size),
                '--num_runs', str(repetitions), '--seed', str(args.seed)]
     inventory = subprocess.check_output(['nvidia-smi', '--query-gpu=name,uuid,driver_version,memory.total',
                                          '--format=csv,noheader'], text=True)
     started = {'command': command, 'prepared': prepared, 'size': args.size,
+               'matching_diagnostic': args.matching_check,
                'repetitions': repetitions, 'seed': args.seed, 'gpu_inventory': inventory,
                'slurm_job_id': os.environ.get('SLURM_JOB_ID'), 'cwd': str(source),
                'core_dump_limit_bytes': resource.getrlimit(resource.RLIMIT_CORE)[0],
@@ -252,6 +280,12 @@ def run(args):
                    three_run_measurement_complete=(repetitions == 3),
                    benchmark_acceptance='Pending organizer review; no automatic publication',
                    mean_compute_seconds_per_pair=sum(r['compute_seconds_per_pair'] for r in reports) / repetitions)
+    if args.matching_check:
+        summary['matching_validation'] = load(source / 'io' / NAMES[args.size] / 'gpu-matching-validation.json')
+        if (summary['matching_validation'].get('passed') is not True
+                or summary['matching_validation'].get('pairs') != PAIRS[args.size]
+                or summary['matching_validation'].get('absolute_tolerance') != 1e-6):
+            raise ValueError('GPU matching comparison failed')
     write_new(work / 'completed.json', summary)
     print(json.dumps(summary, indent=2))
 
@@ -293,6 +327,8 @@ def main():
             sub.add_argument('--seed', type=int, default=42)
             sub.add_argument('--previous', type=Path)
             sub.add_argument('--smoke', action='store_true')
+            sub.add_argument('--matching-check', action='store_true')
+            sub.add_argument('--matching-validation', type=Path)
         else:
             sub.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()

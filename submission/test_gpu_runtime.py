@@ -161,11 +161,13 @@ class ServerModelReferenceTest(unittest.TestCase):
 
 
 class ScorerCommandTest(unittest.TestCase):
-    def test_uses_public_context_without_gpu_mode(self):
+    def test_uses_public_context_with_gpu_mode(self):
         command = gpu_runtime.scorer_command(Path("eval.bin"), Path("task"))
         self.assertEqual(command[1], "scorer")
         self.assertIn("--eval-context", command)
-        self.assertNotIn("--gpu", command)
+        self.assertIn("--gpu", command)
+        self.assertIn("--matching-task", command)
+        self.assertNotIn("--secret-context", command)
 
 
 if __name__ == "__main__":

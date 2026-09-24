@@ -1,126 +1,61 @@
-# CryptoFace GPU — upstream FHE benchmark submission v1
+# CryptoFace GPU
 
-This is a new submission version, separate from the optimization campaign.
-Its `harness/` is byte-identical to `fhe-benchmarking/face-recognition` revision
-**a7c12d34680bdd39198a349cf1ebeec89ae88061**, upstream HEAD checked 2026-09-17.
-Do not edit it. `release.json` pins all source files and the upstream harness.
-No reference monkey-patching or historical CPU-reference patch is applied.
+Encrypted face recognition with GPU feature extraction and pair matching, using
+the unchanged [FHE face-recognition harness](https://github.com/fhe-benchmarking/face-recognition/tree/a7c12d34680bdd39198a349cf1ebeec89ae88061).
+Raw results and provenance: [single](measurements/single/), [small](measurements/small/).
 
-## Status
+## Reproduce
 
-The backend is the frozen, previously validated `ntt-generic-twiddle-v1`.
-The historical **3.732899565 compute seconds/pair** is not a measurement of
-this new submission, an official three-run average, or single-request latency.
-Publish only new results produced by this version's unchanged harness.
+Requires four H200 GPUs, the pinned Latti-AI/LattiSense sources (private access),
+NTL, model weights, real face-pair data, InsightFace models, and a Python environment
+matching `requirements.txt` and the backend manifest. This is not a self-contained
+public clean-clone build. Use real images only; keep builds and runtime artifacts
+in scratch.
 
-Only three captured submission files change: two stage adapters now use
-upstream `params.iodir().parent` instead of the custom `params.io_root()`;
-native build paths default to the run directory instead of a home-specific
-marker file. GPU arithmetic, encrypted stages, CKKS parameters, weights,
-tolerances and client/server key boundaries are unchanged.
-
-The immutable `backend/` archive includes historical custom-harness source and
-documentation for build provenance. It is not executed as the benchmark:
-only the top-level upstream `harness/` is used.
-
-## Prerequisites
-
-- Four NVIDIA H200 GPUs and the validated Python environment (`requirements.txt`).
-- Existing real benchmark `face_dataset.h5`, verified against its pinned hash.
-- All five pinned `buffalo_l` ONNX inputs preprovisioned under
-  `~/.insightface/models/buffalo_l`; this can be a scratch-backed input symlink.
-- Pinned Latti-AI/LattiSense sources, NTL and model weights for a fresh build.
-
-The launcher checks inputs first; it does not request model/dataset downloads.
-Private dependency access is currently required, so this is not yet a publicly
-self-contained clean-clone distribution. The backend builder uses the existing
-H200 cluster module loader; a different toolchain needs separate validation.
-Build paths must be below `SCRATCH_ROOT/reproducible/`.
-
-## Verify and build
+Set `SOURCE` to this checkout, `PYTHON` to the validated Python executable, and
+`SCRATCH`, `LATTI_SOURCE`, `NTL_ROOT`, `MODEL_INPUT`, `DATASET` to existing inputs.
+The bundled module loader targets the measured H200 cluster.
 
 ```bash
-python -B scripts/benchmark.py verify
-python -B -m unittest discover -s tests
-python -B scripts/build_backend.py \
-  --scratch-root /path/to/scratch \
-  --work /path/to/scratch/reproducible/backend-v1 \
-  --repository-source /path/to/pinned/latti-ai \
-  --ntl-root /path/to/ntl-sysroot \
-  --model-input /path/to/model_parameters.h5
+set -e
+ulimit -c 0
+umask 077
+export PYTHONDONTWRITEBYTECODE=1
+mkdir -p "$SCRATCH/tmp" "$SCRATCH/cache"
+export TMPDIR="$SCRATCH/tmp" XDG_CACHE_HOME="$SCRATCH/cache"
+cd "$SCRATCH"
+"$PYTHON" -B "$SOURCE/scripts/benchmark.py" verify
+"$PYTHON" -B "$SOURCE/scripts/build_backend.py" --scratch-root "$SCRATCH" \
+  --work "$SCRATCH/reproducible/backend" --repository-source "$LATTI_SOURCE" \
+  --ntl-root "$NTL_ROOT" --model-input "$MODEL_INPUT"
+source "$SCRATCH/reproducible/backend/source/scripts/load_h200_modules.sh"
+"$PYTHON" -B "$SOURCE/scripts/build_gpu_matching.py" --scratch-root "$SCRATCH" \
+  --baseline-build "$SCRATCH/reproducible/backend" --work "$SCRATCH/reproducible/gpu"
+
+prepare() {
+  "$PYTHON" -B "$SOURCE/scripts/benchmark.py" prepare --scratch-root "$SCRATCH" \
+    --work "$SCRATCH/reproducible/$1" --backend-build "$SCRATCH/reproducible/gpu" --dataset "$DATASET"
+}
+run() {
+  local work="$1"; shift
+  "$PYTHON" -B "$SOURCE/scripts/benchmark.py" run --scratch-root "$SCRATCH" \
+    --work "$SCRATCH/reproducible/$work" "$@"
+}
+prepare check
+run check --size 0 --smoke --matching-check
+prepare single
+run single --size 0 --matching-validation "$SCRATCH/reproducible/check/completed.json"
+prepare small
+run small --size 1 --matching-validation "$SCRATCH/reproducible/check/completed.json" \
+  --previous "$SCRATCH/reproducible/single/completed.json"
 ```
 
-A previously verified fresh build of this exact backend may also be used.
-The launcher rechecks dependency/source maps, patch provenance and binaries.
+Stop on any failed check. Single and small each use three repetitions. Use fresh
+work directories. To run small independently after the local correctness gate,
+use `scripts/run_independent_small.py --help`.
 
-## Measure through the official harness
-
-Each workload gets a fresh scratch directory; previous results are never
-overwritten. Preparation makes a hash-verified source copy there. Native cwd,
-keys, ciphertexts, dataset selections, caches, logs and temporary files stay
-in scratch; core dumps and Python bytecode are disabled.
-
-```bash
-python -B scripts/benchmark.py prepare \
-  --scratch-root /path/to/scratch \
-  --work /path/to/scratch/reproducible/v1-small \
-  --backend-build /path/to/scratch/reproducible/backend-v1 \
-  --dataset /path/to/real/face_dataset.h5
-python -B scripts/benchmark.py run \
-  --scratch-root /path/to/scratch \
-  --work /path/to/scratch/reproducible/v1-small --size 1
-```
-
-This invokes `python -B harness/run_submission.py 1 --num_runs 3 --seed 42`
-from the scratch copy, with upstream sampling, reference model and acceptance
-checks intact. Sizes are single=0 (1 pair), small=1 (128), medium=2 (256),
-large=3 (1024). A one-real-pair integration check uses `--size 0 --smoke` and
-is explicitly not a complete three-run measurement.
-
-Prepare a new medium directory, then run with its passing small evidence:
-
-```bash
-python -B scripts/benchmark.py run \
-  --scratch-root /path/to/scratch \
-  --work /path/to/scratch/reproducible/v1-medium --size 2 \
-  --previous /path/to/scratch/reproducible/v1-small/completed.json
-```
-
-Large requires passing medium. Source, dataset, settings and backend identities
-must match across gates. `scripts/run_slurm.sh` provides prepare + run in a new
-job-specific directory; supply its documented `FHE_*` variables and appropriate
-cluster directives. No existing pending jobs are modified.
-Pin `FHE_RELEASE_SHA256` to `sha256sum release.json` when submitting; the queued
-launcher refuses a changed release rather than silently running new code.
-
-## Collect and publish
-
-```bash
-python -B scripts/benchmark.py collect \
-  --scratch-root /path/to/scratch \
-  --work /path/to/scratch/reproducible/v1-small \
-  --output /path/to/code/measurements/gpu-v1-small-runset
-```
-
-Only final result JSONs, run provenance and release identity are collected.
-Report all three runs and their average, hardware and full harness metrics;
-harness total, server total and encrypted compute are distinct.
-
-Official submission also requires an explanation of at least 128-bit security,
-public source or an accepted access arrangement, and organizer review. Reusing
-unchanged parameters is not a fresh security estimate. The historical
-intermittent Go-heap corruption remains a reliability caveat. Do not claim
-official acceptance merely because this version runs.
-
-## Future backend versions
-
-1. Copy this release to a new version; retain the upstream `harness/` pin.
-2. Update backend/adapter code and review security/correctness. Regenerate the
-   release ID and source hashes deliberately; do not edit historical versions.
-3. Run real-image smoke, small, medium, then optionally large.
-4. Retain three new results per submitted batch size with code, build and input
-   identities. Never relabel previous measurements as belonging to new code.
-5. Commit qualified code/results and update the benchmark repository link.
-
-An upstream harness upgrade is a separately pinned change requiring comparison
-and fresh measurements. Never patch the harness to accelerate one backend.
+Verify source/result identities with `python3 -B scripts/summarize_publication.py`.
+Documentation-only publication differences are recorded in
+`measurements/source-equivalence.json`; measured executable code is unchanged.
+See [security scope](submission/latti/validation/SECURITY.md). Numerical agreement
+is not a security proof or benchmark-organizer acceptance.
