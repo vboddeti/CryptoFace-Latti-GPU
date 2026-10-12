@@ -1,0 +1,72 @@
+{
+  "completed_utc": "2026-10-12T19:53:09.247255+00:00",
+  "source_commit": "1351d2e47d8836d86a190c4c835f3335633ec9be",
+  "source_release_sha256": "1771faffeb523c330534f0a8854feb91f2cb0563321811ef29603f85f0f3687e",
+  "unit_tests_passed": 23,
+  "clean_git_clone_source_verified": true,
+  "clean_python_environment_requirements_and_pip_check_passed": true,
+  "fresh_remote_dependency_clone_and_native_build_passed": true,
+  "packed_model_download_sha256": "dcc3bf9c4f5a5805666b5b46d244d50d0756636a8b0000765158e912b3eaec62",
+  "fresh_dataset_download_and_index_sha256": "fa11020b308a5f48d91942a49fe3235a452167603e3aed6d53c2320938f1cc7d",
+  "prepared_native": {
+    "binary_sha256": "280b2058d353c4c4ca720e048119f7ac600b1fe7aed0d9f3c2a6d79ec9775d42",
+    "runtime_sha256": "31e88f93c9cfa22b890d6ecc10e7039e7d677e5a2f32f1df38fe80379571e63c",
+    "gpu_matching_build_sha256": "0c3cadf55ffe4304177f5357e53171b32c5db2a9118bc73d9428c25d08267879"
+  },
+  "real_pair_preprocessing_comparison": {
+    "passed": true,
+    "real_pairs": 1,
+    "array_shape": [
+      1,
+      2,
+      4,
+      1,
+      3,
+      32,
+      32
+    ],
+    "comparison": "exact array equality",
+    "maximum_absolute_error": 0.0,
+    "source_release_sha256": "1771faffeb523c330534f0a8854feb91f2cb0563321811ef29603f85f0f3687e",
+    "output_sha256": {
+      "original": "906b75ac700f641688f6c0b5f2c78f3e661192bdfbe10b03dc293290f696090d",
+      "fresh": "906b75ac700f641688f6c0b5f2c78f3e661192bdfbe10b03dc293290f696090d"
+    }
+  },
+  "real_pair_harness_smoke": {
+    "completed": true,
+    "pairs": 1,
+    "diagnostic_only": true,
+    "gpu_type": "NVIDIA H200",
+    "gpu_count": 1,
+    "tested_release_sha256": "c0f2299e91c778ac6213ccb533669dddcc9a455d07b5ec4c0e24e4d8998c2c69",
+    "native": {
+      "binary_sha256": "280b2058d353c4c4ca720e048119f7ac600b1fe7aed0d9f3c2a6d79ec9775d42",
+      "runtime_sha256": "f43f6af015f925ac24b00ab7e1731f82bf15b9ba9270668fa19e68765a07b804",
+      "gpu_matching_build_sha256": "52a708fd18bdc41eaab2634815aff45c60e50089ce63acf7a14679756debc773"
+    },
+    "matching_validation": {
+      "passed": true,
+      "pairs": 1,
+      "absolute_tolerance": 1e-06,
+      "max_absolute_error": 7.163225568262988e-11,
+      "reference": "unchanged encrypted CPU inner product on identical ciphertexts"
+    },
+    "all_harness_stages_completed": true,
+    "final_numerical_sources_equal_to_smoke_sources": true,
+    "final_generated_matching_task_equal_to_smoke_task": true,
+    "later_changes": "Setup environment isolation, dependency pins, documentation, and setup tests; no inference, parameter, matching, or harness changes."
+  },
+  "security_and_correctness_review": {
+    "parameters_key_generation_precision_and_tolerances_unchanged": true,
+    "submission_harness_and_optimization_patch_unchanged": true,
+    "diff_scope": "Build orchestration, artifact provisioning, dependency pins, documentation, tests, and restored source metadata.",
+    "secret_dependent_arithmetic_memory_access_and_runtime_lifetimes_changed": false,
+    "runtime_keys_plaintexts_ciphertexts_and_logs_published": false,
+    "limitations": "Scoped source/provenance review and one real-pair diagnostic; not a security proof or fresh small/medium benchmark validation."
+  },
+  "new_performance_results_claimed": false,
+  "existing_three_run_measurements_unchanged": true,
+  "access_requirement": "human-analysis/latti-ai and human-analysis/lattisense were private during validation; the user will make them public for anonymous reproduction.",
+  "toolchain_scope": "Fresh system-PATH build on the H200 cluster with GCC 12.3, CUDA 12.9, Go 1.22.1 and HDF5 1.14; Ubuntu package installation instructions were not executed on a separate Ubuntu host."
+}
