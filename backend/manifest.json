@@ -206,7 +206,7 @@
     "README.md": "c273c6f10c0bf80e8f133083e7d7fab55818afc80b0698245518168ac795730e",
     "optimization.patch": "2abc1f697bf446fd175b8480c634a5fced7af7c7811bf6b1e22c3ef2c2337c31",
     "reference.patch": "a4cc05db1072817f0ca95465006eb0cea96c4e70fb28fb5b8928cf63b9160a8c",
-    "rebuild_host_key_sources.py": "bb8dec1e056474e90af6c31ddc54327a9ea60bb481bfba3208831f8c473392a0",
+    "rebuild_host_key_sources.py": "0ed9635b200902f0f43d4d28694b6f81f44934eea7fffebcfebb1b8d3276fa63",
     "source_generators/create_moddown_p3_entry_patch.py": "41acd4ac681a6a07534599dc82a1cbc329dedbb82237478a4d158d806cac7375",
     "source_generators/create_ntt_config_cache_patch.py": "b11530674e7c36854c1f8b2a9d1ed5939f91d25caef832616d93f0f7ba9574e4",
     "source_generators/create_ntt_n16_specialization_patch.py": "e685261abf89a659a5bc59214a552238735d5a66fb27be9ccc6dce5659816547",

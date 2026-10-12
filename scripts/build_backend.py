@@ -15,8 +15,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scratch-root', type=Path, required=True)
     parser.add_argument('--work', type=Path, required=True)
-    parser.add_argument('--repository-source', type=Path, required=True,
-                        help='Existing pinned latti-ai checkout with its lattisense submodule; no downloads')
+    parser.add_argument('--repository-source', type=Path,
+                        help='Optional local pinned Git checkout; otherwise clone from GitHub')
+    parser.add_argument('--system-toolchain', action='store_true',
+                        help='Use installed tools on PATH instead of cluster environment modules')
     parser.add_argument('--ntl-root', type=Path, required=True)
     parser.add_argument('--model-input', type=Path, required=True)
     args = parser.parse_args()
@@ -29,10 +31,13 @@ def main():
     builder.SCRATCH = args.scratch_root.resolve(strict=True)
     sys.argv = [str(ROOT / 'backend/rebuild_host_key_sources.py'), '--build',
                 '--bundle', str(ROOT / 'backend/base'), '--work', str(work),
-                '--repository-source', str(args.repository_source.resolve(strict=True)),
                 '--ntl-root', str(args.ntl_root.resolve(strict=True)),
                 '--model-input', str(args.model_input.resolve(strict=True)),
                 '--lattisense-extra-patch', str(ROOT / 'backend/optimization.patch')]
+    if args.repository_source:
+        sys.argv += ['--repository-source', str(args.repository_source.resolve(strict=True))]
+    if args.system_toolchain:
+        sys.argv += ['--toolchain-env', str(ROOT / 'scripts/load_system_toolchain.sh')]
     builder.main()
     print(f"Built {release['release_id']} in {work}; release SHA256 {digest(ROOT / 'release.json')}")
 

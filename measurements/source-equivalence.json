@@ -1,10 +1,10 @@
 {
   "measured_release_sha256": "6e008fbefd298711030422fe5cebe4956d1b2898bb362073176f42f685e4cda9",
-  "publication_release_sha256": "d7d34babf3c887c06300b64df1d768626d891049c69f9ab9bba8cf9cf86bd6d5",
-  "measured_executable_and_backend_files_unchanged": true,
+  "publication_release_sha256": "1771faffeb523c330534f0a8854feb91f2cb0563321811ef29603f85f0f3687e",
+  "measured_executable_and_backend_files_unchanged": false,
   "documentation_changes": [
-    "README.md simplified",
-    "GPU_MATCHING.md omitted"
+    "README.md expanded with standalone setup, prepacking disclosure, security, and benchmark instructions",
+    "GPU_MATCHING.md omitted in original publication"
   ],
   "additional_publication_tools": [
     "scripts/run_independent_small.py",
@@ -12,5 +12,37 @@
     "scripts/test_independent_small.py",
     "scripts/summarize_publication.py"
   ],
-  "measured_manifest": "measurements/small/release.json"
+  "measured_manifest": "measurements/small/release.json",
+  "measured_inference_and_cryptographic_source_unchanged": true,
+  "new_build_performance_claimed": false,
+  "build_setup_changes": {
+    "backend/manifest.json": {
+      "measured_sha256": "d2a2912b64d264accbc11ec82ddaaa438ba1cb0479378bfb857f236c3da6322d",
+      "current_sha256": "4a2e53729c73134ccc453185e756cbb8a1e0f928eaefe8bc1a12fb3083089fe9"
+    },
+    "backend/rebuild_host_key_sources.py": {
+      "measured_sha256": "bb8dec1e056474e90af6c31ddc54327a9ea60bb481bfba3208831f8c473392a0",
+      "current_sha256": "0ed9635b200902f0f43d4d28694b6f81f44934eea7fffebcfebb1b8d3276fa63"
+    },
+    "scripts/build_backend.py": {
+      "measured_sha256": "f33b1a2b7feb002a361980e33cbf3ea4b16fba2a34d498ccbd2b0c98de092962",
+      "current_sha256": "6a292365e4c94de668147cd94465e089babd292f9b9e11c0fe1615b220f404b9"
+    },
+    "requirements.txt": {
+      "measured_sha256": "a6ff419b9e9c11aac3c4d989a9c86c21ec08e8099f85db5e44a8320576c13c4c",
+      "current_sha256": "3be294775d322c9df6274806a6908a18018fea18e7daa87b300699995b2f53eb"
+    }
+  },
+  "additional_setup_tools": [
+    "scripts/build_submission.sh",
+    "scripts/setup_runtime.py",
+    "scripts/load_system_toolchain.sh",
+    "scripts/install_system_deps.sh",
+    "external-inputs.json",
+    "tests/test_setup_runtime.py"
+  ],
+  "restored_omitted_source_metadata": [
+    "backend/base/code/.cryptoface-artifact-root",
+    "backend/base/code/datasets/face_dataset_provenance.json"
+  ]
 }

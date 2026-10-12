@@ -1,0 +1,10 @@
+{
+  "model": {
+    "url": "https://raw.githubusercontent.com/vboddeti/CryptoFace-Latti-GPU/0a367d8e1fedb387daec1d4bb5b45ee4c2d8b7d4/model_parameters.h5",
+    "sha256": "dcc3bf9c4f5a5805666b5b46d244d50d0756636a8b0000765158e912b3eaec62"
+  },
+  "repositories": {
+    "latti-ai": {"url": "https://github.com/human-analysis/latti-ai.git", "commit": "88b4bac84b938f74e6936b19580181f97542e175"},
+    "lattisense": {"url": "https://github.com/human-analysis/lattisense.git", "commit": "809b35830550370b4570c9d45ae9e33c78a97156"}
+  }
+}

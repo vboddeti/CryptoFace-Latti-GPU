@@ -134,6 +134,8 @@ def main():
     parser.add_argument('--work', type=Path)
     parser.add_argument('--ntl-root', type=Path)
     parser.add_argument('--model-input', type=Path)
+    parser.add_argument('--toolchain-env', type=Path,
+                        help='Explicit environment setup script instead of cluster modules')
     parser.add_argument('--lattisense-extra-patch', type=Path,
                         help='Apply a source-only optimization patch in the new scratch build only')
     parser.add_argument('--repository-source', type=Path,
@@ -216,13 +218,17 @@ def main():
         env.update(LATTI_AI_SOURCE=str(dependency), LATTI_AI_BUILD=str(dependency / 'build-h200'),
                    BUILD_DIR=str(dependency / 'build-h200'), LATTISENSE_CUDA_ARCH='90',
                    LATTI_STAGE_RUNTIME_OUTPUT=str(work / 'submission-build/latti_stage_runtime'))
-        run(['bash', '-lc', 'set -euo pipefail\nulimit -c 0\nsource "$1/scripts/load_h200_modules.sh"\n'
+        toolchain = (args.toolchain_env.resolve(strict=True) if args.toolchain_env
+                     else source / 'scripts/load_h200_modules.sh')
+        env['CRYPTOFACE_NTL_SYSROOT'] = str(ntl)
+        run(['bash', '-c' if args.toolchain_env else '-lc',
+             'set -euo pipefail\nulimit -c 0\nsource "$2"\n'
              'bash "$LATTI_AI_SOURCE/scripts/build_h200.sh"\n'
              'bash "$1/submission/native/build_runtime.sh"\n'
              'python3 -B "$1/scripts/write_build_manifest.py" --output "$CRYPTOFACE_BUILD_DIR/build_manifest.json" '
              '--latti-ai-source "$LATTI_AI_SOURCE" --native-binary "$LATTI_STAGE_RUNTIME_OUTPUT" '
              '--runtime "$LATTI_AI_BUILD/inference/lattisense/liblattisense.so" --cuda-architecture sm_90',
-             '--', str(source)])
+             '--', str(source), str(toolchain)])
     print(f'Rebuild completed in {work}; real-image replay still required. No latency claim.')
 
 

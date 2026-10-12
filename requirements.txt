@@ -6,14 +6,15 @@
 # Validated image-preprocessing and ArcFace reference stack. Exact versions
 # keep face detection, landmark alignment, and checked-in quality reproducible.
 numpy==2.2.6
-torch
-pyyaml
+torch==2.13.0
+pyyaml==6.0.3
 opencv-python-headless==5.0.0.93
 insightface==0.7.3
 h5py==3.16.0
 pillow==12.3.0
 onnxruntime==1.24.3
-huggingface_hub>=0.24
+huggingface_hub==1.28.0
 
 # GPU backend is built from the pinned backend/ package, not Orion.
-scikit-learn>=1.5
+scikit-learn==1.9.0
+networkx==3.6.1

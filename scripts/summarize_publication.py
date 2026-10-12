@@ -29,7 +29,17 @@ def summarize(root):
     measured_path = root / 'measurements/small/release.json'
     measured = load(measured_path)
     measured_hash = digest(measured_path)
+    equivalence = load(root / 'measurements/source-equivalence.json')
+    build_only = {'backend/manifest.json', 'backend/rebuild_host_key_sources.py',
+                  'scripts/build_backend.py', 'requirements.txt'}
+    changes = equivalence.get('build_setup_changes', {})
+    if set(changes) != build_only:
+        raise ValueError('Unexpected build-only source exceptions')
     for name, expected in measured['files'].items():
+        if name in build_only:
+            if changes[name] != {'measured_sha256': expected, 'current_sha256': digest(root / name)}:
+                raise ValueError(f'Build-source provenance differs: {name}')
+            continue
         if name not in ('README.md', 'GPU_MATCHING.md') and digest(root / name) != expected:
             raise ValueError(f'Measured executable/backend source differs: {name}')
     diagnostic = load(root / 'measurements/validation/provenance.json')
@@ -40,6 +50,8 @@ def summarize(root):
         raise ValueError('Missing matching correctness evidence')
     summary = {'publication_release_sha256': release_hash,
                'measured_release_sha256': measured_hash,
+               'build_setup_changed': True,
+               'new_build_performance_claimed': False,
                'upstream_harness_revision': release['upstream_revision'],
                'matching_correctness': check, 'workloads': {}}
     for name, pairs in [('single', 1), ('small', 128)]:
