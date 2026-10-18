@@ -1,0 +1,149 @@
+--- a/fhe_ops_lib/lattigo/go_sdk/c_struct_import_export.go
++++ b/fhe_ops_lib/lattigo/go_sdk/c_struct_import_export.go
+@@ -6,7 +6,6 @@
+ */
+ import "C"
+ import (
+-	"sync"
+ 	"unsafe"
+ 
+ 	"github.com/cipherflow-fhe/lattigo/bfv"
+@@ -16,18 +15,6 @@
+ 	"github.com/cipherflow-fhe/lattigo/rlwe/ringqp"
+ )
+ 
+-// ABI exports are invoked from the C++ task executor's worker threads. The
+-// conversion code uses cgo handles and C-owned buffers, while the referenced
+-// Lattigo objects are shared by those workers. Keep that ownership boundary
+-// single-threaded; GPU kernels and the independent GPU server processes still
+-// execute concurrently.
+-var abiBridgeMu sync.Mutex
+-
+-func lockABIBridge() func() {
+-	abiBridgeMu.Lock()
+-	return abiBridgeMu.Unlock
+-}
+-
+ func import_component(src *C.CComponent, dest *[]uint64) {
+ 	N := int(src.n)
+ 	// Zero-copy: dest slice points directly into C memory (src.data).
+@@ -159,7 +146,6 @@
+ 
+ //export ImportBfvCiphertext
+ func ImportBfvCiphertext(dest_handle uint64, c_ciphertext *C.CCiphertext) {
+-	defer lockABIBridge()()
+ 	dest := get_object[bfv.Ciphertext](dest_handle)
+ 	degree := int(c_ciphertext.degree)
+ 	poly_slice := unsafe.Slice(c_ciphertext.polys, degree+1)
+@@ -170,7 +156,6 @@
+ 
+ //export ImportCkksCiphertext
+ func ImportCkksCiphertext(parameter_handle uint64, c_ciphertext *C.CCiphertext) uint64 {
+-	defer lockABIBridge()()
+ 	param := get_object[ckks.Parameters](parameter_handle)
+ 	level := int(c_ciphertext.level)
+ 	degree := int(c_ciphertext.degree)
+@@ -190,7 +175,6 @@
+ 
+ //export ExportBfvPlaintextRingt
+ func ExportBfvPlaintextRingt(plaintext_ringt_handle uint64, c_plaintext *C.CPlaintext) {
+-	defer lockABIBridge()()
+ 	plaintext_ringt := get_object[bfv.PlaintextRingT](plaintext_ringt_handle)
+ 	c_plaintext.level = 0
+ 	c_plaintext.scale = 0
+@@ -202,7 +186,6 @@
+ 
+ //export ExportCkksPlaintextRingt
+ func ExportCkksPlaintextRingt(plaintext_ringt_handle uint64, c_plaintext *C.CPlaintext) {
+-	defer lockABIBridge()()
+ 	plaintext_ringt := get_object[ckks.PlaintextRingT](plaintext_ringt_handle)
+ 	c_plaintext.level = 0
+ 	c_plaintext.scale = C.double(plaintext_ringt.Scale)
+@@ -214,7 +197,6 @@
+ 
+ //export ExportBfvPlaintextMul
+ func ExportBfvPlaintextMul(plaintext_mul_handle uint64, c_plaintext *C.CPlaintext) {
+-	defer lockABIBridge()()
+ 	plaintext_mul := get_object[bfv.PlaintextMul](plaintext_mul_handle)
+ 	c_plaintext.level = C.int(plaintext_mul.Level())
+ 	c_plaintext.scale = 0
+@@ -226,7 +208,6 @@
+ 
+ //export ExportCkksPlaintextMul
+ func ExportCkksPlaintextMul(parameter_handle uint64, plaintext_mul_handle uint64, mf_nbits int, c_plaintext *C.CPlaintext) {
+-	defer lockABIBridge()()
+ 	param := get_object[ckks.Parameters](parameter_handle)
+ 	plaintext_mul := get_object[ckks.PlaintextMul](plaintext_mul_handle)
+ 	c_plaintext.level = C.int(plaintext_mul.Level())
+@@ -244,7 +225,6 @@
+ 
+ //export ExportBfvPlaintext
+ func ExportBfvPlaintext(plaintext_handle uint64, c_plaintext *C.CPlaintext) {
+-	defer lockABIBridge()()
+ 	plaintext := get_object[bfv.Plaintext](plaintext_handle)
+ 	c_plaintext.level = C.int(plaintext.Level())
+ 	c_plaintext.scale = 0
+@@ -256,7 +236,6 @@
+ 
+ //export ExportCkksPlaintext
+ func ExportCkksPlaintext(plaintext_handle uint64, c_plaintext *C.CPlaintext) {
+-	defer lockABIBridge()()
+ 	plaintext := get_object[ckks.Plaintext](plaintext_handle)
+ 	c_plaintext.level = C.int(plaintext.Level())
+ 	c_plaintext.scale = C.double(plaintext.Scale)
+@@ -268,7 +247,6 @@
+ 
+ //export ExportBfvCiphertext
+ func ExportBfvCiphertext(ciphertext_handle uint64, c_ciphertext *C.CCiphertext) {
+-	defer lockABIBridge()()
+ 	ciphertext := get_object[bfv.Ciphertext](ciphertext_handle)
+ 	c_ciphertext.level = C.int(ciphertext.Level())
+ 	c_ciphertext.degree = C.int(ciphertext.Degree())
+@@ -281,7 +259,6 @@
+ 
+ //export ExportCkksCiphertext
+ func ExportCkksCiphertext(ciphertext_handle uint64, c_ciphertext *C.CCiphertext) {
+-	defer lockABIBridge()()
+ 	ciphertext := get_object[ckks.Ciphertext](ciphertext_handle)
+ 	c_ciphertext.level = C.int(ciphertext.Level())
+ 	c_ciphertext.degree = C.int(ciphertext.Degree())
+@@ -295,7 +272,6 @@
+ 
+ //export ExportBfvRelinKey
+ func ExportBfvRelinKey(parameter_handle uint64, relin_key_handle uint64, level int, key_mf_nbits int, c_relin_key *C.CRelinKey) {
+-	defer lockABIBridge()()
+ 	param := get_object[bfv.Parameters](parameter_handle)
+ 	relin_key := get_object[rlwe.RelinearizationKey](relin_key_handle)
+ 	export_key_switch_key(param.Parameters, relin_key.Keys[0], c_relin_key, level, -1, key_mf_nbits)
+@@ -303,7 +279,6 @@
+ 
+ //export ExportCkksRelinKey
+ func ExportCkksRelinKey(parameter_handle uint64, relin_key_handle uint64, level int, key_mf_nbits int, c_relin_key *C.CRelinKey) {
+-	defer lockABIBridge()()
+ 	param := get_object[ckks.Parameters](parameter_handle)
+ 	relin_key := get_object[rlwe.RelinearizationKey](relin_key_handle)
+ 	export_key_switch_key(param.Parameters, relin_key.Keys[0], c_relin_key, level, -1, key_mf_nbits)
+@@ -311,7 +286,6 @@
+ 
+ //export ExportBfvGaloisKey
+ func ExportBfvGaloisKey(parameter_handle uint64, galois_key_handle uint64, level int, key_mf_nbits int, c_galois_key *C.CGaloisKey) {
+-	defer lockABIBridge()()
+ 	param := get_object[bfv.Parameters](parameter_handle)
+ 	galois_key := get_object[rlwe.RotationKeySet](galois_key_handle)
+ 	export_galois_key(param.Parameters, galois_key, c_galois_key, level, key_mf_nbits)
+@@ -319,7 +293,6 @@
+ 
+ //export ExportCkksGaloisKey
+ func ExportCkksGaloisKey(parameter_handle uint64, galois_key_handle uint64, level int, key_mf_nbits int, c_galois_key *C.CGaloisKey) {
+-	defer lockABIBridge()()
+ 	param := get_object[ckks.Parameters](parameter_handle)
+ 	galois_key := get_object[rlwe.RotationKeySet](galois_key_handle)
+ 	export_galois_key(param.Parameters, galois_key, c_galois_key, level, key_mf_nbits)
+@@ -327,7 +300,6 @@
+ 
+ //export ExportCkksSwitchingKey
+ func ExportCkksSwitchingKey(parameter_handle uint64, switching_key_handle uint64, level int, sp_level int, key_mf_nbits int, c_switch_key *C.CKeySwitchKey) {
+-	defer lockABIBridge()()
+ 	param := get_object[ckks.Parameters](parameter_handle)
+ 	switch_key := get_object[rlwe.SwitchingKey](switching_key_handle)
+ 	export_key_switch_key(param.Parameters, switch_key, c_switch_key, level, sp_level, key_mf_nbits)

@@ -1,61 +1,60 @@
 #!/usr/bin/env python3
-"""
-client_preprocess_input.py — Face detection, alignment, and patch extraction.
+"""Stage 5: detect, align, normalize, and split faces into 32x32 patches."""
 
-Reads the indexed test-pair store, runs InsightFace detection and alignment,
-and writes patches incrementally to one indexed HDF5 artifact.
-"""
+from __future__ import annotations
+
+if __name__ == "__main__":
+    from bootstrap import ensure_environment
+    ensure_environment()
+
 import sys
-import h5py
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+import h5py
+
 from common import (
-    decode_image, load_circuit_manifest, load_detector, parse_stage_args,
-    preprocess_one_image, release_file_cache,
+    decode_image,
+    load_detector,
+    parse_stage_args,
+    preprocess_one_image,
+    release_file_cache,
 )
 
 
-def main():
+def main() -> None:
     _size, cfg, params = parse_stage_args(resolve_checkpoint=False)
-
     pairs_path = params.get_test_input_file()
-    if not pairs_path.exists():
+    if not pairs_path.is_file():
         print(f"[client_preprocess_input] ERROR: {pairs_path} not found", flush=True)
         sys.exit(1)
 
     output_path = params.io_intermediate_dir() / "preprocessed_patches.h5"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = output_path.with_suffix(".h5.tmp")
-    n_pairs = params.get_batch_size()
-    branch_shapes = load_circuit_manifest(cfg)["circuit"]["input_shapes"]
-    if not branch_shapes or any(shape != branch_shapes[0] for shape in branch_shapes):
-        raise ValueError("All CryptoFace branch input shapes must match")
-    branch_count = len(branch_shapes)
-    patch_shape = tuple(branch_shapes[0])
-    print(f"[client_preprocess_input] {n_pairs} pairs -> {output_path}", flush=True)
+    pair_count = params.get_batch_size()
+    branch_count = len(cfg["input_names"])
+    print(f"[client_preprocess_input] {pair_count} pairs -> {output_path}", flush=True)
     detector = load_detector()
 
     with h5py.File(pairs_path, "r") as pairs, h5py.File(temporary, "w") as output:
         if not {"image0", "image1"}.issubset(pairs):
             raise ValueError(f"Input store is missing image datasets: {pairs_path}")
-        if len(pairs["image0"]) != n_pairs or len(pairs["image1"]) != n_pairs:
+        if len(pairs["image0"]) != pair_count or len(pairs["image1"]) != pair_count:
             raise ValueError(
-                f"Expected {n_pairs} input pairs, found "
+                f"Expected {pair_count} pairs, found "
                 f"{len(pairs['image0'])}/{len(pairs['image1'])}"
             )
         patches_store = output.create_dataset(
             "patches",
-            shape=(n_pairs, 2, branch_count, *patch_shape),
+            shape=(pair_count, 2, branch_count, 1, 3, 32, 32),
             dtype="float32",
-            chunks=(1, 2, branch_count, *patch_shape),
+            chunks=(1, 2, branch_count, 1, 3, 32, 32),
         )
-        for pair_index in range(n_pairs):
+        for pair_index in range(pair_count):
             for image_index in range(2):
                 patches = preprocess_one_image(
                     detector,
                     decode_image(pairs[f"image{image_index}"][pair_index]),
-                    cfg["input_size"],
+                    int(cfg["input_size"]),
                 )
                 if len(patches) != branch_count:
                     raise ValueError(
@@ -63,14 +62,13 @@ def main():
                     )
                 for branch_index, patch in enumerate(patches):
                     patches_store[pair_index, image_index, branch_index] = patch.numpy()
-        output.attrs["pair_count"] = n_pairs
+        output.attrs["pair_count"] = pair_count
         output.attrs["branch_count"] = branch_count
     temporary.replace(output_path)
     release_file_cache(pairs_path)
     release_file_cache(output_path)
-
     print(
-        f"[client_preprocess_input] Saved {n_pairs * 2 * branch_count} patches",
+        f"[client_preprocess_input] Saved {pair_count * 2 * branch_count} patches",
         flush=True,
     )
 

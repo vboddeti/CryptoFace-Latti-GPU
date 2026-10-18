@@ -1,73 +1,99 @@
 #!/usr/bin/env python3
-"""
-client_encode_encrypt_input.py — Encode and encrypt patches.
+"""Stage 6: encrypt aligned CryptoFace patches with the client context."""
 
-Initializes orion with io_mode=load (loads PK from keys.h5 for encryption),
-reads input_level from public_keys/input_level.txt, then incrementally encodes
-and encrypts patches from the indexed preprocessing artifact.
+from __future__ import annotations
 
-Does NOT need fit/compile/preload_all — encryption only requires the public key.
-"""
-import sys
+if __name__ == "__main__":
+    from bootstrap import ensure_environment
+    ensure_environment()
+
+import json
+import time
+
 import h5py
-import torch
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-from common import (
-    init_orion_scheme, load_circuit_manifest, pair_stem, parse_stage_args,
-    release_file_cache, validate_key_cache,
+from common import pair_stem, parse_stage_args, release_file_cache
+from gpu_runtime import (
+    NativeSession,
+    atomic_write_json,
+    client_command,
+    require_runtime,
+    runtime_environment,
 )
 
 
-def main():
+def main() -> None:
     _size, cfg, params = parse_stage_args(resolve_checkpoint=False)
+    require_runtime(cfg)
+    secret_context = params.iodir() / "client_secret" / "secret_context.bin"
+    if not secret_context.is_file():
+        raise FileNotFoundError(f"Missing client secret context: {secret_context}")
 
-    import orion
-
-    # Encryption uses the public key only — load it (not the secret key).
-    validate_key_cache(cfg, params)
-    init_orion_scheme(
-        cfg, params, "load", "none", load_secret_key=False
-    )
-    input_level = int((params.iodir() / "public_keys" / "input_level.txt").read_text().strip())
-
-    patch_store_path = params.io_intermediate_dir() / "preprocessed_patches.h5"
-    if not patch_store_path.is_file():
-        raise FileNotFoundError(f"Missing preprocessed patches: {patch_store_path}")
+    patch_path = params.io_intermediate_dir() / "preprocessed_patches.h5"
+    if not patch_path.is_file():
+        raise FileNotFoundError(f"Missing preprocessed patches: {patch_path}")
     upload_dir = params.iodir() / "ciphertexts_upload"
     upload_dir.mkdir(parents=True, exist_ok=True)
+    log_path = params.iodir() / "logs" / "client_encrypt.log"
+    pair_count = params.get_batch_size()
+    input_names = cfg["input_names"]
+    encrypted_images = 0
+    started = time.monotonic()
 
-    branch_count = len(load_circuit_manifest(cfg)["circuit"]["input_shapes"])
-    encrypted_count = 0
-    n_pairs = params.get_batch_size()
-    with h5py.File(patch_store_path, "r") as patch_store:
-        patches = patch_store["patches"]
-        if patches.shape[:3] != (n_pairs, 2, branch_count):
-            raise ValueError(
-                f"Unexpected patch store shape: {patches.shape}"
-            )
-        for pair_index in range(n_pairs):
-            for image_index in range(2):
-                for branch_index in range(branch_count):
-                    tensor = torch.from_numpy(
-                        patches[pair_index, image_index, branch_index]
+    session = NativeSession(
+        client_command(secret_context),
+        env=runtime_environment(),
+        log_path=log_path,
+        ready_marker="[StageClient] Ready.",
+    )
+    try:
+        session.start()
+        with h5py.File(patch_path, "r") as patch_store:
+            patches = patch_store["patches"]
+            expected = (pair_count, 2, len(input_names), 1, 3, 32, 32)
+            if patches.shape != expected:
+                raise ValueError(f"Unexpected patch tensor shape {patches.shape}; expected {expected}")
+            for pair_index in range(pair_count):
+                for image_index in range(2):
+                    request_id = f"{pair_stem(pair_index)}_i{image_index}"
+                    inputs = {
+                        name: patches[pair_index, image_index, branch]
+                        .astype("float64", copy=False)
+                        .reshape(-1)
+                        .tolist()
+                        for branch, name in enumerate(input_names)
+                    }
+                    response = session.request(
+                        {
+                            "op": "encrypt",
+                            "id": request_id,
+                            "inputs": inputs,
+                            "output_dir": str(upload_dir),
+                        }
                     )
-                    ciphertext = orion.encrypt(orion.encode(tensor, input_level))
-                    output_path = upload_dir / (
-                        f"{pair_stem(pair_index)}_i{image_index}_"
-                        f"b{branch_index}.h5"
+                    if sorted(response["outputs"]) != sorted(input_names):
+                        raise RuntimeError(f"Incomplete encryption response for {request_id}")
+                    encrypted_images += 1
+                    print(
+                        f"[client_encode_encrypt_input] {encrypted_images}/{2 * pair_count} images",
+                        flush=True,
                     )
-                    ciphertext.save(output_path)
-                    release_file_cache(output_path)
-                    encrypted_count += 1
-                    del ciphertext
-    release_file_cache(patch_store_path)
-    patch_store_path.unlink()
+    finally:
+        session.close()
 
+    release_file_cache(patch_path)
+    patch_path.unlink()
+    encrypted_bytes = sum(path.stat().st_size for path in upload_dir.glob("*.ct"))
+    report_path = params.iodir() / "submission_reported.json"
+    report = json.loads(report_path.read_text()) if report_path.exists() else {
+        "schema_version": 1,
+        "Bandwidth": {},
+    }
+    report["Bandwidth"]["Encrypted inputs"] = encrypted_bytes
+    atomic_write_json(report_path, report)
     print(
-        f"[client_encode_encrypt_input] Encrypted {encrypted_count} patches "
-        f"-> {upload_dir}",
+        f"[client_encode_encrypt_input] Encrypted {encrypted_images} images in "
+        f"{time.monotonic() - started:.1f}s",
         flush=True,
     )
 

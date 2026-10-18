@@ -1,0 +1,2679 @@
+{
+    "algorithm": "CKKS",
+    "key": {
+        "rlk": 31,
+        "glk": {
+            "126977": 31,
+            "122881": 31,
+            "114689": 31,
+            "4097": 31,
+            "98305": 31,
+            "8193": 31,
+            "65537": 31,
+            "16385": 31,
+            "32769": 31,
+            "86145": 31,
+            "61313": 31,
+            "52429": 16,
+            "5": 31,
+            "57601": 31,
+            "7937": 31,
+            "89129": 12,
+            "25": 31,
+            "106497": 31,
+            "81409": 31,
+            "67585": 31,
+            "113153": 31,
+            "31745": 31,
+            "128481": 31,
+            "125": 31,
+            "15625": 31,
+            "78125": 31,
+            "28609": 31,
+            "63489": 31,
+            "81921": 31,
+            "625": 31,
+            "60833": 31,
+            "95233": 31,
+            "3125": 31,
+            "49153": 31,
+            "45441": 31,
+            "77185": 31,
+            "59393": 31,
+            "89345": 31,
+            "71681": 31,
+            "102017": 31,
+            "117889": 31,
+            "118785": 31,
+            "13921": 31,
+            "35841": 31,
+            "106561": 31,
+            "69153": 31,
+            "99329": 31,
+            "97937": 31,
+            "49665": 31,
+            "131071": 31
+        },
+        "ckks_btp_swk": {
+            "swk_dts": [
+                0,
+                2
+            ],
+            "swk_std": [
+                31,
+                2
+            ]
+        }
+    },
+    "online": [
+        {
+            "id": "_Split_output_0",
+            "type": "ct",
+            "size": [
+                1
+            ],
+            "level": 16,
+            "phase": "in"
+        },
+        {
+            "id": "_Split_output_1",
+            "type": "ct",
+            "size": [
+                1
+            ],
+            "level": 16,
+            "phase": "in"
+        },
+        {
+            "id": "_Split_output_2",
+            "type": "ct",
+            "size": [
+                1
+            ],
+            "level": 16,
+            "phase": "in"
+        },
+        {
+            "id": "_Split_output_3",
+            "type": "ct",
+            "size": [
+                1
+            ],
+            "level": 16,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_conv0_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_conv0_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_conv0_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_conv0_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_conv0_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_conv0_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_conv0_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_conv0_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer0_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 14,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer0_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 15,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer0_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 14,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer0_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 15,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer0_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 14,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer0_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 15,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer0_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 14,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer0_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 15,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer0_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer0_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer0_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer0_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer0_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer0_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer0_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer0_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer0_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 12,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer0_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer0_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer0_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer0_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 12,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer0_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer0_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer0_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer0_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 12,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer0_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer0_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer0_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer0_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 12,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer0_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer0_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer0_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer0_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer0_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer0_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer0_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer0_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer0_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer0_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer0_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer1_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer1_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 11,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer1_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer1_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 11,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer1_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer1_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 11,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer1_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer1_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 11,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_0_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_1_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_2_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_3_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer1_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer1_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer1_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 8,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_0_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer1_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer1_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 8,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_1_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer1_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer1_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 8,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_2_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer1_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer1_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 8,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_3_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer1_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_0_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_1_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_2_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_3_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer1_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer2_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 12,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer2_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer2_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 12,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer2_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer2_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 12,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer2_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer2_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 12,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer2_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_0_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_1_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_2_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_3_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer2_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer2_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 9,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer2_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer2_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer2_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer2_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 9,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer2_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer2_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer2_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer2_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 9,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer2_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer2_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer2_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer2_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 9,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer2_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer2_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer2_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_0_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_1_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_2_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_3_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer2_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer3_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 6,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer3_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer3_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 6,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer3_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer3_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 6,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer3_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer3_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 6,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer3_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_0_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_1_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_2_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_3_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer3_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer3_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 3,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer3_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 4,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_0_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer3_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 3,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer3_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 4,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_1_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer3_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 3,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer3_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 4,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_2_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer3_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 3,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer3_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 4,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_3_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer3_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_0_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_1_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_2_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_3_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer3_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer4_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer4_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 14,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer4_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer4_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 14,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer4_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer4_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 14,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer4_poly1_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 13,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer4_poly1_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 14,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_0_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_1_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_2_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_3_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer4_conv1_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer4_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_layer4_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 11,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer4_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer4_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer4_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_layer4_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 11,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer4_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer4_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer4_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_layer4_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 11,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer4_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer4_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer4_poly2_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 10,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_layer4_poly2_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 11,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer4_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1,
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer4_shortcut_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_0_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_0_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_0_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_1_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_1_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_1_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_2_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_2_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_2_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convm__nets_3_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convw__nets_3_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                2,
+                32,
+                9
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "convb__nets_3_layer4_conv2_Conv",
+            "type": "pt_ringt",
+            "size": [
+                1
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_pool_poly_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_0_pool_poly_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 8,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_pool_poly_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_1_pool_poly_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 8,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_pool_poly_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_2_pool_poly_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 8,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_pool_poly_HerPN_0",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 7,
+            "phase": "in"
+        },
+        {
+            "id": "herpnw__nets_3_pool_poly_HerPN_1",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 8,
+            "phase": "in"
+        },
+        {
+            "id": "densew__linears_0_Gemm",
+            "type": "pt_ringt",
+            "size": [
+                8,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "denseb__linears_0_Gemm",
+            "type": "pt_ringt",
+            "size": [
+                8
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "densew__linears_1_Gemm",
+            "type": "pt_ringt",
+            "size": [
+                8,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "denseb__linears_1_Gemm",
+            "type": "pt_ringt",
+            "size": [
+                8
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "densew__linears_2_Gemm",
+            "type": "pt_ringt",
+            "size": [
+                8,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "denseb__linears_2_Gemm",
+            "type": "pt_ringt",
+            "size": [
+                8
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "densew__linears_3_Gemm",
+            "type": "pt_ringt",
+            "size": [
+                8,
+                32
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "denseb__linears_3_Gemm",
+            "type": "pt_ringt",
+            "size": [
+                8
+            ],
+            "level": 0,
+            "phase": "in"
+        },
+        {
+            "id": "l2norm__L2NormPoly_a",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 4,
+            "phase": "in"
+        },
+        {
+            "id": "l2norm__L2NormPoly_b",
+            "type": "pt_mul",
+            "size": [
+                1
+            ],
+            "level": 4,
+            "phase": "in"
+        },
+        {
+            "id": "l2norm__L2NormPoly_c",
+            "type": "pt",
+            "size": [
+                1
+            ],
+            "level": 3,
+            "phase": "in"
+        },
+        {
+            "id": "output",
+            "type": "ct",
+            "size": [
+                8
+            ],
+            "level": 2,
+            "phase": "out"
+        }
+    ],
+    "offline": []
+}

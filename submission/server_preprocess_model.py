@@ -1,86 +1,91 @@
 #!/usr/bin/env python3
-"""Server-owned checkpoint compilation and persistent packed-model caching."""
-import json
-import sys
-import time
-from pathlib import Path
+"""Stage 3: validate and expose the precompiled, server-owned GPU model."""
 
-sys.path.insert(0, str(Path(__file__).parent))
-from common import (
-    build_pipeline_server_save, get_face_params, get_repo_root,
-    get_server_model_dir, load_submission_config, mute_logs,
-    validate_cache_manifest, validate_key_cache, write_cache_manifest,
-    write_server_model_reference,
+from __future__ import annotations
+
+if __name__ == "__main__":
+    from bootstrap import ensure_environment
+    ensure_environment()
+
+import json
+import shutil
+import time
+
+from common import get_face_params, load_submission_config, mute_logs
+from gpu_runtime import (
+    BUILD_MANIFEST,
+    MODEL_DIR,
+    atomic_write_json,
+    directory_size,
+    require_runtime,
+    sha256_file,
 )
 
 
-def main():
+def main() -> None:
     mute_logs()
-    t0 = time.time()
-    cfg = load_submission_config(resolve_checkpoint=True)
-
-    size_file = get_repo_root() / "io" / "current_size.txt"
-    if not size_file.exists():
-        print(f"[server_preprocess_model] ERROR: {size_file} not found. "
-              f"Run client_key_generation first.", flush=True)
-        sys.exit(1)
-    size = int(size_file.read_text().strip())
-    params = get_face_params(size)
-    validate_key_cache(cfg, params)
-    model_dir, identity = get_server_model_dir(cfg, params)
-    model_dir.mkdir(parents=True, exist_ok=True)
-    cache_hit = False
-    try:
-        cache = validate_cache_manifest(model_dir, verify_hashes=True)
-        cache_hit = cache["metadata"].get("identity") == identity
-    except (FileNotFoundError, ValueError):
-        cache = None
-    if not cache_hit:
-        stale = model_dir / "cache_manifest.json"
-        if stale.exists():
-            stale.unlink()
-        print("[model-prep] Compiling checkpoint into server-owned diagonals...", flush=True)
-        input_level = build_pipeline_server_save(cfg, params, model_dir)
-        cache = write_cache_manifest(
-            model_dir,
-            ["diagonals.h5"],
-            {"identity": identity, "input_level": input_level},
+    cfg = load_submission_config()
+    size_file = get_face_params(0).iodir().parent / "current_size.txt"
+    if not size_file.is_file():
+        raise FileNotFoundError(f"Missing benchmark size marker: {size_file}")
+    params = get_face_params(int(size_file.read_text().strip()))
+    started = time.monotonic()
+    require_runtime(cfg)
+    eval_context = params.iodir() / "public_keys" / "eval_context.bin"
+    if not eval_context.is_file():
+        raise FileNotFoundError(
+            f"Missing public evaluation context: {eval_context}; run stage 2 first"
         )
-    else:
-        input_level = int(cache["metadata"]["input_level"])
-        print("[model-prep] Validated persistent packed-model cache.", flush=True)
 
-    client_level = int(
-        (params.iodir() / "public_keys" / "input_level.txt").read_text()
+    server_data_root = params.get_server_data_dir()
+    server_data_root.mkdir(parents=True, exist_ok=True)
+    task_dir = server_data_root / f"latti-{cfg['mega_ag_sha256'][:24]}"
+    server_dir = task_dir / "server"
+    cache_valid = (
+        (server_dir / "model_parameters.h5").is_file()
+        and (server_dir / "mega_ag.json").is_file()
+        and sha256_file(server_dir / "model_parameters.h5")
+        == cfg["model_parameters_sha256"]
+        and sha256_file(server_dir / "mega_ag.json") == cfg["mega_ag_sha256"]
     )
-    if input_level != client_level:
-        raise ValueError(
-            f"Client/server input-level mismatch: {client_level} != {input_level}"
-        )
-    write_server_model_reference(params, model_dir, cache)
+    if not cache_valid:
+        temporary = task_dir.with_name(task_dir.name + ".tmp")
+        shutil.rmtree(temporary, ignore_errors=True)
+        shutil.copytree(MODEL_DIR / "server", temporary / "server")
+        shutil.rmtree(task_dir, ignore_errors=True)
+        temporary.replace(task_dir)
 
-    provenance = {
+    packed_model_bytes = directory_size(server_dir)
+    reference = {
         "schema_version": 1,
-        "model": {
-            "hf_repo": cfg["ckpt_hf_repo"],
-            "hf_file": cfg["ckpt_hf_file"],
-            "sha256": identity["checkpoint_sha256"],
-        },
-        "orion_commit": cfg["orion_commit"],
-        "orion_config_sha256": identity["orion_config_sha256"],
-        "circuit_manifest_sha256": identity["circuit_manifest_sha256"],
-        "pair_slots": cfg["pair_slots"],
-        "stage_chunk_pairs": cfg["stage_chunk_pairs"],
-        "aggregator_max_pairs": cfg["aggregator_max_pairs"],
-        "packed_model_sha256": cache["files"]["diagonals.h5"]["sha256"],
-        "packed_model_size_bytes": cache["files"]["diagonals.h5"]["size_bytes"],
+        "task_dir": str(task_dir.resolve()),
+        "packed_model_size_bytes": packed_model_bytes,
+        "model_parameters_sha256": sha256_file(server_dir / "model_parameters.h5"),
+        "mega_ag_sha256": sha256_file(server_dir / "mega_ag.json"),
     }
-    (params.iodir() / "provenance.json").write_text(
-        json.dumps(provenance, indent=2) + "\n"
+    atomic_write_json(params.iodir() / "server_model.json", reference)
+    build_manifest = json.loads(BUILD_MANIFEST.read_text())
+    atomic_write_json(
+        params.iodir() / "provenance.json",
+        {
+            "schema_version": 1,
+            "submission": "CryptoFace Latti source-built H200 GPU",
+            "latti_ai_commit": cfg["latti_ai_commit"],
+            "lattisense_commit": cfg["lattisense_commit"],
+            "heongpu_commit": cfg["heongpu_commit"],
+            "runtime_sha256": build_manifest["artifacts"]["lattisense_runtime"]["sha256"],
+            "native_binary_sha256": build_manifest["artifacts"]["native_binary"]["sha256"],
+            "security_classical_bits": cfg["security_classical_bits"],
+            "poly_modulus_degree": cfg["poly_modulus_degree"],
+            "q_limbs": cfg["q_limbs"],
+            "p_limbs": cfg["p_limbs"],
+            "physical_bootstraps_per_image": cfg["physical_bootstraps_per_image"],
+            "cuda_architecture": cfg["cuda_architecture"],
+        },
     )
     print(
-        f"[model-prep] Ready in {time.time()-t0:.1f}s "
-        f"(cache={'hit' if cache_hit else 'created'})",
+        f"[server_preprocess_model] Materialized packed model in io/server_data in "
+        f"{time.monotonic() - started:.1f}s",
         flush=True,
     )
 

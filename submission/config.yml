@@ -1,24 +1,28 @@
 cryptoface:
-  # Model checkpoint is hosted on Hugging Face and downloaded (and cached) on
-  # first use. To run fully offline, place the file at ckpt_path (below) and it
-  # will be used instead of the download.
-  ckpt_hf_repo:   "halmsu/cryptoface-v1"
-  ckpt_hf_file:   "backbone-64x64.ckpt"
-  ckpt_path:      "submission/checkpoints/backbone-64x64.ckpt"
-  orion_config:   "submission/orion_configs/cryptoface_net4.yml"
-  circuit_manifest: "submission/circuit_manifest.json"
-  orion_commit: "7e27281354f9ac5ffd0cf4330fee2bbea75a9dc7"
-  input_size:     64
-  # L2NormPoly coefficients: a*y^2 + b*y + c ≈ 1/sqrt(y), where y = sum-of-squares of the embedding.
-  # Fitted on CelebA face_dataset.npy (SOS range [108, 505], mean=267, std=76).
-  l2_poly_coeffs: [3.497142e-07, -3.070292e-04, 1.182291e-01]
-  # Ten concurrent pair slots target maximum throughput on an otherwise idle
-  # 1 TB machine. The formal calibration run verifies this setting before use.
-  pair_slots: 10
-  # Maximum number of pairs retained in conventional server bookkeeping. This
-  # bounds memory even though strict stage boundaries retain all ciphertexts.
-  stage_chunk_pairs: 50
-  # Refresh the aggregation process regularly to release retained Go/FHE memory.
-  aggregator_max_pairs: 10
-  # Bound both encrypted branch generation and aggregation for one pair.
-  pair_timeout_s: 3600
+  input_size: 64
+  embedding_dim: 256
+  input_names:
+    - _Split_output_0
+    - _Split_output_1
+    - _Split_output_2
+    - _Split_output_3
+  # H200 validation peaked near 129 GiB per worker. Auto-selection is
+  # intentionally stricter so only near-idle devices are claimed.
+  minimum_gpu_free_memory_mib: 140000
+  maximum_gpu_utilization_percent: 0
+  required_gpu_compute_capability: "9.0"
+
+  latti_ai_repo: "https://github.com/human-analysis/latti-ai.git"
+  latti_ai_commit: 88b4bac84b938f74e6936b19580181f97542e175
+  lattisense_repo: "https://github.com/human-analysis/lattisense.git"
+  lattisense_commit: 809b35830550370b4570c9d45ae9e33c78a97156
+  heongpu_commit: aaf76f94bfb2fca2f3b02ff63bea72fb8d4b1680
+  model_parameters_sha256: dcc3bf9c4f5a5805666b5b46d244d50d0756636a8b0000765158e912b3eaec62
+  mega_ag_sha256: ab6393f8d138dbd0b341a07dc1b96e4a697fda31087dd73c81aee3d8df029be8
+
+  security_classical_bits: 128.31868162155314
+  poly_modulus_degree: 65536
+  q_limbs: 32
+  p_limbs: 3
+  physical_bootstraps_per_image: 8
+  cuda_architecture: sm_90

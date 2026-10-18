@@ -1,0 +1,47 @@
+{
+  "estimator_commit": "3e48ef421ec256afddb3e7d2249a77eab6e9ba12",
+  "cost_model": "<estimator.reduction.MATZOV object at 0x7632fcf3b620>",
+  "shape_model": "<function GSA at 0x7632fcc35380>",
+  "parameters": {
+    "n": 65536,
+    "q_limb_count": 32,
+    "p_limb_count": 3,
+    "log2_qp": 1737.9999663450142,
+    "error_sigma": 3.2,
+    "secret_hamming_weight": 640,
+    "samples": "unlimited"
+  },
+  "excluded_attacks": {
+    "arora-gb": "not applicable to unbounded discrete-Gaussian error",
+    "bkw": "estimator documentation classifies BKW as noncompetitive"
+  },
+  "attacks": {
+    "usvp": {
+      "log2_rop": 128.50067972577796,
+      "summary": "rop: \u22482^128.5, red: \u22482^128.5, \u03b4: 1.004609, \u03b2: 323, d: 127949, tag: usvp"
+    },
+    "bdd": {
+      "log2_rop": 128.4963494316444,
+      "summary": "rop: \u22482^128.5, red: \u22482^128.5, svp: \u22482^118.2, \u03b2: 323, \u03b7: 346, d: 127466, tag: bdd"
+    },
+    "bdd_hybrid": {
+      "log2_rop": 128.49012680278958,
+      "summary": "rop: \u22482^128.5, red: \u22482^128.4, svp: \u22482^124.2, \u03b2: 319, \u03b7: 96, \u03b6: 624, |S|: \u22482^74.0, d: 129678, prob: 0.900, \u21bb: 2, tag: hybrid"
+    },
+    "bdd_mitm_hybrid": {
+      "log2_rop": 128.31868162155314,
+      "summary": "rop: \u22482^128.3, red: \u22482^128.3, svp: \u22482^122.8, \u03b2: 315, \u03b7: 2, \u03b6: 1725, |S|: \u22482^173.8, d: 128032, prob: 0.684, \u21bb: 4, tag: hybrid"
+    },
+    "dual": {
+      "log2_rop": 129.36860389229722,
+      "summary": "rop: \u22482^129.4, mem: 327, m: \u22482^16.0, \u03b2: 326, d: 131253, \u21bb: 1, tag: dual"
+    },
+    "dual_hybrid": {
+      "log2_rop": 129.53631195215564,
+      "summary": "rop: \u22482^129.5, red: \u22482^129.5, guess: \u22482^107.5, \u03b2: 323, p: 2, \u03b6: 0, t: 90, \u03b2': 357, N: \u22482^15.9, m: \u22482^16.0"
+    }
+  },
+  "limiting_attack": "bdd_mitm_hybrid",
+  "classical_security_bits": 128.31868162155314,
+  "passes_128_bit_gate": true
+}

@@ -1,46 +1,72 @@
 #!/usr/bin/env python3
-"""Generate client keys from the public circuit manifest, without model access."""
-import sys
-import time
-from pathlib import Path
+"""Stage 2: generate client secret material and public evaluation material."""
 
-sys.path.insert(0, str(Path(__file__).parent))
-from common import (
-    parse_stage_args, init_orion_scheme, load_circuit_manifest,
-    sha256_file, write_cache_manifest,
+from __future__ import annotations
+
+if __name__ == "__main__":
+    from bootstrap import ensure_environment
+    ensure_environment()
+
+import subprocess
+import time
+
+from common import parse_stage_args
+from gpu_runtime import (
+    MODEL_DIR,
+    NATIVE_BINARY,
+    atomic_write_json,
+    require_runtime,
+    runtime_environment,
+    sha256_file,
 )
 
 
-def main():
+def main() -> None:
     size, cfg, params = parse_stage_args(resolve_checkpoint=False)
-    t0 = time.time()
+    require_runtime(cfg)
+    started = time.monotonic()
+    params.iodir().mkdir(parents=True, exist_ok=True)
+    params.iodir().parent.mkdir(parents=True, exist_ok=True)
+    (params.iodir().parent / "current_size.txt").write_text(f"{size}\n")
 
-    keys_dir = params.iodir() / "public_keys"
-    keys_dir.mkdir(parents=True, exist_ok=True)
+    secret_dir = params.iodir() / "client_secret"
+    public_dir = params.iodir() / "public_keys"
+    secret_dir.mkdir(parents=True, exist_ok=True)
+    public_dir.mkdir(parents=True, exist_ok=True)
+    secret_context = secret_dir / "secret_context.bin"
+    eval_context = public_dir / "eval_context.bin"
 
-    (params.rootdir / "io").mkdir(parents=True, exist_ok=True)
-    (params.rootdir / "io" / "current_size.txt").write_text(str(size))
-    print("[keygen] Generating keys from circuit manifest...", flush=True)
-    import orion
-    init_orion_scheme(cfg, params, "save", "none")
-    circuit_manifest = load_circuit_manifest(cfg)
-    orion.generate_keys_from_manifest(circuit_manifest)
-    input_level = int(circuit_manifest["circuit"]["input_level"])
-    (keys_dir / "input_level.txt").write_text(str(input_level))
-    metadata = {
-        "circuit_manifest_sha256": sha256_file(Path(cfg["circuit_manifest"])),
-        "orion_commit": cfg["orion_commit"],
-        "input_level": input_level,
-    }
-    print("[keygen] Hashing and validating generated key artifacts...", flush=True)
-    write_cache_manifest(keys_dir, ["keys.h5", "input_level.txt"], metadata)
-    write_cache_manifest(
-        params.iodir() / "secret_key", ["sk.h5"],
-        {"orion_commit": cfg["orion_commit"]},
+    command = [
+        str(NATIVE_BINARY), "keygen",
+        "--task-dir", str(MODEL_DIR),
+        "--secret-out", str(secret_context),
+        "--eval-out", str(eval_context),
+    ]
+    print("[client_key_generation] Generating CKKS client/evaluation contexts...", flush=True)
+    subprocess.run(command, check=True, env=runtime_environment())
+    if not secret_context.is_file() or not eval_context.is_file():
+        raise RuntimeError("Native key generation did not create both contexts")
+
+    atomic_write_json(
+        secret_dir / "manifest.json",
+        {
+            "schema_version": 1,
+            "secret_context_sha256": sha256_file(secret_context),
+            "secret_context_size_bytes": secret_context.stat().st_size,
+        },
+    )
+    atomic_write_json(
+        public_dir / "manifest.json",
+        {
+            "schema_version": 1,
+            "eval_context_sha256": sha256_file(eval_context),
+            "eval_context_size_bytes": eval_context.stat().st_size,
+            "contains_secret_key": False,
+        },
     )
     print(
-        f"[keygen] Complete in {time.time()-t0:.1f}s "
-        f"(input_level={input_level})",
+        f"[client_key_generation] Complete in {time.monotonic() - started:.1f}s; "
+        f"public context={eval_context.stat().st_size / 2**30:.2f} GiB",
         flush=True,
     )
 

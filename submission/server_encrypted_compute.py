@@ -1,608 +1,485 @@
 #!/usr/bin/env python3
-"""Evaluate encrypted face pairs with bounded process and memory lifetimes."""
+"""Stage 7: run secret-free native H200 inference and encrypted matching."""
 
-import os
+from __future__ import annotations
 
-os.environ.setdefault("GOGC", "20")
-os.environ.setdefault("GODEBUG", "madvdontneed=1")
+if __name__ == "__main__":
+    from bootstrap import ensure_environment
+    ensure_environment()
 
-import gc
 import json
-import multiprocessing
-import sys
+import os
+import queue
+import re
 import time
-import traceback
-from collections import deque
-from multiprocessing.connection import wait
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-from common import (
-    build_pipeline_load, pair_stem, parse_stage_args, release_file_cache,
+from common import pair_stem, parse_stage_args, release_file_cache
+from gpu_runtime import (
+    NativeSession,
+    atomic_write_json,
+    gpu_ids,
+    require_runtime,
+    runtime_environment,
+    scorer_command,
+    server_command,
+    server_task_dir,
 )
 
 
-_pipeline = None
-_embedding_dim = None
-_n_patches = None
+def _current_cpu_affinity() -> list[int] | None:
+    """Report the scheduler-provided CPU set without narrowing it."""
+    if not hasattr(os, "sched_getaffinity"):
+        return None
+    return sorted(os.sched_getaffinity(0))
 
 
-def _error(exc):
-    return {
-        "status": "fail",
-        "type": type(exc).__name__,
-        "message": str(exc),
-        "traceback": traceback.format_exc(),
-    }
+def _env_enabled(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
-def _branch_entry(pair_idx, image_idx, branch_idx, upload_dir, connection):
-    """Run one image/backbone branch and exit after returning its ciphertext."""
-    try:
-        from orion.backend.python.tensors import CipherTensor
-        from orion.core import scheme
-
-        total_t0 = time.time()
-        input_path = (
-            upload_dir / f"{pair_stem(pair_idx)}_i{image_idx}_b{branch_idx}.h5"
+def _pair_count(default: int) -> int:
+    raw_limit = os.environ.get("CRYPTOFACE_PAIR_LIMIT")
+    if raw_limit is None:
+        return default
+    limit = int(raw_limit)
+    if limit <= 0 or limit > default:
+        raise ValueError(
+            f"CRYPTOFACE_PAIR_LIMIT must be between 1 and {default}, got {limit}"
         )
-        ciphertext = CipherTensor.load(scheme, input_path)
-        release_file_cache(input_path)
-        deserialize_s = time.time() - total_t0
-
-        forward_t0 = time.time()
-        feature = getattr(_pipeline, f"linear{branch_idx}")(
-            getattr(_pipeline, f"backbone{branch_idx}")(ciphertext)
-        )
-        forward_s = time.time() - forward_t0
-
-        serialize_t0 = time.time()
-        feature_serialized = feature.serialize()
-        connection.send({
-            "status": "pass",
-            "pair_idx": pair_idx,
-            "image_idx": image_idx,
-            "branch_idx": branch_idx,
-            "deserialize_s": deserialize_s,
-            "forward_s": forward_s,
-            "serialize_s": time.time() - serialize_t0,
-            "feature_serialized": feature_serialized,
-        })
-    except BaseException as exc:
-        try:
-            connection.send(_error(exc))
-        except BaseException:
-            pass
-        raise
-    finally:
-        connection.close()
+    return limit
 
 
-def _terminate(processes):
-    for process in processes:
-        if process.is_alive():
-            process.terminate()
-    for process in processes:
-        process.join(timeout=30)
-        if process.is_alive():
-            process.kill()
-            process.join()
+def _percentile(values: list[float], percentile: float) -> float:
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * percentile
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = position - lower
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
 
 
-def _run_branches(ctx, pair_idx, upload_dir, timeout_s):
-    processes, pending, results = [], {}, []
-    started = time.time()
-    try:
-        for image_idx in range(2):
-            for branch_idx in range(_n_patches):
-                receive, send = ctx.Pipe(duplex=False)
-                process = ctx.Process(
-                    target=_branch_entry,
-                    args=(pair_idx, image_idx, branch_idx, upload_dir, send),
-                )
-                process.start()
-                send.close()
-                processes.append(process)
-                pending[receive] = process
-
-        deadline = time.monotonic() + timeout_s
-        while pending:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError(f"Pair {pair_idx} branch generation timed out")
-            for connection in wait(list(pending), timeout=min(5.0, remaining)):
-                process = pending.pop(connection)
-                try:
-                    result = connection.recv()
-                except EOFError as exc:
-                    raise RuntimeError(
-                        f"Branch worker {process.pid} exited without a result"
-                    ) from exc
-                finally:
-                    connection.close()
-                if result["status"] != "pass":
-                    raise RuntimeError(
-                        f"Pair {pair_idx} branch failed: {result.get('type')}: "
-                        f"{result.get('message')}\n{result.get('traceback')}"
-                    )
-                results.append(result)
-
-        for process in processes:
-            process.join(timeout=30)
-            if process.exitcode != 0:
-                raise RuntimeError(
-                    f"Branch worker {process.pid} exited with {process.exitcode}"
-                )
-    except BaseException:
-        _terminate(processes)
-        for connection in pending:
-            connection.close()
-        raise
-
-    results.sort(key=lambda item: (item["image_idx"], item["branch_idx"]))
-    return time.time() - started, results
-
-
-def _slot_loop(connection, timeout_s):
-    """Remain FHE-quiescent and fork a clean generation for each pair."""
-    ctx = multiprocessing.get_context("fork")
-    try:
-        while True:
-            command = connection.recv()
-            if command["op"] == "stop":
-                connection.send({"status": "stopped"})
-                return
-            try:
-                wall_s, results = _run_branches(
-                    ctx, command["pair_idx"],
-                    Path(command["upload_dir"]), timeout_s,
-                )
-                connection.send({
-                    "status": "pass",
-                    "pair_idx": command["pair_idx"],
-                    "branch_wall_s": wall_s,
-                    "branch_results": results,
-                })
-                del results
-                gc.collect()
-            except BaseException as exc:
-                connection.send(_error(exc))
-                return
-    finally:
-        connection.close()
-
-
-def _aggregate(command):
-    from orion.backend.python.tensors import CipherTensor
-    from orion.core import scheme
-    from utils.he_operations import compute_inner_product_encrypted, tree_reduce_add
-
-    pair_idx = command["pair_idx"]
-    started = time.time()
-    by_image = {0: {}, 1: {}}
-    for result in command["branch_results"]:
-        by_image[result["image_idx"]][result["branch_idx"]] = (
-            result["feature_serialized"]
-        )
-    features = [
-        [
-            CipherTensor.deserialize(scheme, by_image[image][branch])
-            for branch in range(_n_patches)
-        ]
-        for image in range(2)
-    ]
-    deserialize_s = time.time() - started
-
-    normalization_t0 = time.time()
-    embeddings = [
-        _pipeline.normalization(tree_reduce_add(image_features))
-        for image_features in features
-    ]
-    normalization_s = time.time() - normalization_t0
-
-    inner_product_t0 = time.time()
-    score = compute_inner_product_encrypted(
-        embeddings[0], embeddings[1], _embedding_dim
-    )
-    inner_product_s = time.time() - inner_product_t0
-    serialize_t0 = time.time()
-    output_dir = Path(command["output_dir"])
-    output_path = output_dir / f"{pair_stem(pair_idx)}_score.h5"
-    score.save(output_path)
-    release_file_cache(output_path)
-    serialize_s = time.time() - serialize_t0
-
-    del by_image, features, embeddings, score
-    gc.collect()
-    return {
-        "feature_deserialize_s": deserialize_s,
-        "normalization_s": normalization_s,
-        "inner_product_s": inner_product_s,
-        "serialize_s": serialize_s,
-    }
-
-
-def _aggregator_generation_loop(connection):
-    try:
-        while True:
-            command = connection.recv()
-            if command["op"] == "stop":
-                connection.send({"status": "stopped"})
-                return
-            try:
-                connection.send({
-                    "status": "pass",
-                    "result": _aggregate(command),
-                })
-            except BaseException as exc:
-                connection.send(_error(exc))
-                return
-    finally:
-        connection.close()
-
-
-def _start(ctx, target, *args):
-    parent, child = ctx.Pipe(duplex=True)
-    process = ctx.Process(target=target, args=(child, *args))
-    process.start()
-    child.close()
-    return process, parent
-
-
-def _stop(process, connection):
-    if process.is_alive() and not connection.closed:
-        try:
-            connection.send({"op": "stop"})
-            if connection.poll(30):
-                connection.recv()
-        except BaseException:
-            pass
-    process.join(timeout=30)
-    if process.is_alive():
-        process.terminate()
-        process.join(timeout=30)
-    if process.is_alive():
-        process.kill()
-        process.join()
-    if not connection.closed:
-        connection.close()
-
-
-def _aggregator_manager_loop(connection, max_pairs, timeout_s):
-    """Create bounded aggregator children from a permanently quiescent parent."""
-    ctx = multiprocessing.get_context("fork")
-    process = child_connection = None
-    generation_pairs = 0
-    try:
-        while True:
-            command = connection.recv()
-            if command["op"] == "stop":
-                if process is not None:
-                    _stop(process, child_connection)
-                connection.send({"status": "stopped"})
-                return
-            if process is None:
-                process, child_connection = _start(
-                    ctx, _aggregator_generation_loop
-                )
-                generation_pairs = 0
-            child_connection.send(command)
-            if not child_connection.poll(timeout_s):
-                pair_idx = command.get("pair_idx", "unknown")
-                _stop(process, child_connection)
-                process = child_connection = None
-                generation_pairs = 0
-                connection.send({
-                    "status": "fail",
-                    "type": "TimeoutError",
-                    "message": (
-                        f"Pair {pair_idx} aggregation timed out after "
-                        f"{timeout_s}s"
-                    ),
-                    "traceback": "",
-                })
+def _timing_summary(responses: list[dict]) -> dict:
+    samples: dict[str, dict[str, list[float]]] = {}
+    for response in responses:
+        for group_name, timings in response.items():
+            if not group_name.endswith("_timing_seconds") or not isinstance(timings, dict):
                 continue
-            response = child_connection.recv()
-            connection.send(response)
-            generation_pairs += 1
-            del command, response
-            gc.collect()
-            if generation_pairs >= max_pairs:
-                _stop(process, child_connection)
-                process = child_connection = None
-    finally:
-        if process is not None:
-            _stop(process, child_connection)
-        connection.close()
+            group = samples.setdefault(group_name, {})
+            for field, value in timings.items():
+                if isinstance(value, (int, float)):
+                    group.setdefault(field, []).append(float(value))
 
-
-def _validate_pair_inputs(upload_dir, indices):
-    if not indices:
-        raise ValueError("A server chunk must contain at least one pair")
-    missing = [
-        (pair, image, branch)
-        for pair in indices
-        for image in range(2)
-        for branch in range(_n_patches)
-        if not (
-            upload_dir / f"{pair_stem(pair)}_i{image}_b{branch}.h5"
-        ).exists()
-    ]
-    if missing:
-        raise FileNotFoundError(f"Missing {len(missing)} encrypted branch inputs")
-
-
-def _index_chunks(total_pairs, chunk_pairs):
-    """Yield bounded contiguous index lists without a run-sized allocation."""
-    for offset in range(0, total_pairs, chunk_pairs):
-        yield list(range(offset, min(offset + chunk_pairs, total_pairs)))
-
-
-def _empty_summary():
     return {
-        "pairs": 0,
-        "input_io_s": 0.0,
-        "transport_s": 0.0,
-        "backbone_s": 0.0,
-        "normalization_s": 0.0,
-        "inner_product_s": 0.0,
+        group_name: {
+            field: {
+                "count": len(values),
+                "min": min(values),
+                "mean": sum(values) / len(values),
+                "p50": _percentile(values, 0.50),
+                "p95": _percentile(values, 0.95),
+                "max": max(values),
+                "total": sum(values),
+            }
+            for field, values in sorted(fields.items())
+        }
+        for group_name, fields in sorted(samples.items())
     }
 
 
-def _accumulate_results(summary, results):
-    """Fold bounded chunk details into constant-size run-level counters."""
-    for result in results:
-        aggregation = result["aggregation"]
-        summary["pairs"] += 1
-        summary["normalization_s"] += aggregation["normalization_s"]
-        summary["inner_product_s"] += aggregation["inner_product_s"]
-        summary["transport_s"] += (
-            aggregation["feature_deserialize_s"] + aggregation["serialize_s"]
+_REQUEST_BEGIN_PATTERN = re.compile(r"^# request_begin .* id='([^']+)'$")
+_LATTI_TIMING_PATTERN = re.compile(
+    r"^\[Timing\] server (deserialize inputs|run_task total|serialize outputs): "
+    r"([0-9]+(?:\.[0-9]+)?) s$"
+)
+_LATTI_TIMING_FIELDS = {
+    "deserialize inputs": "input_deserialization",
+    "run_task total": "run_task",
+    "serialize outputs": "output_serialization",
+}
+
+
+def _parse_latti_request_timings(log_path: Path) -> dict[str, dict[str, float]]:
+    if not log_path.is_file():
+        return {}
+    parsed: dict[str, dict[str, float]] = {}
+    request_id: str | None = None
+    with log_path.open(encoding="utf-8", errors="replace") as stream:
+        for raw_line in stream:
+            line = raw_line.rstrip("\r\n")
+            request_match = _REQUEST_BEGIN_PATTERN.match(line)
+            if request_match:
+                request_id = request_match.group(1)
+                parsed.setdefault(request_id, {})
+                continue
+            timing_match = _LATTI_TIMING_PATTERN.match(line)
+            if request_id is not None and timing_match:
+                parsed[request_id][_LATTI_TIMING_FIELDS[timing_match.group(1)]] = (
+                    float(timing_match.group(2))
+                )
+    return parsed
+
+
+def main() -> None:
+    stage_started = time.monotonic()
+    _size, cfg, params = parse_stage_args(resolve_checkpoint=False)
+    require_runtime(cfg)
+    runtime_validation_finished = time.monotonic()
+    inherited_cpu_affinity = _current_cpu_affinity()
+    pair_count = _pair_count(params.get_batch_size())
+    stream_scoring = _env_enabled("CRYPTOFACE_STREAM_SCORING", True)
+    keep_stage_inputs = _env_enabled("CRYPTOFACE_KEEP_STAGE_INPUTS", False)
+    input_names = cfg["input_names"]
+    upload_dir = params.iodir() / "ciphertexts_upload"
+    download_dir = params.iodir() / "ciphertexts_download"
+    work_dir = params.iodir() / "server_work"
+    log_dir = params.iodir() / "logs"
+    download_dir.mkdir(parents=True, exist_ok=True)
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    eval_context = params.iodir() / "public_keys" / "eval_context.bin"
+    if not eval_context.is_file():
+        raise FileNotFoundError(f"Missing public evaluation context: {eval_context}")
+    if (params.iodir() / "client_secret").exists():
+        # The harness normally hides this directory from stage 7. Refuse to use it
+        # even when invoking the stage manually from a shared development tree.
+        print("[server_encrypted_compute] Client-secret directory is present but ignored", flush=True)
+
+    task_dir = server_task_dir(params, cfg)
+    physical_gpus = gpu_ids(cfg)
+    sessions = [
+        NativeSession(
+            server_command(eval_context, task_dir),
+            env=runtime_environment(gpu),
+            log_path=log_dir / f"server_gpu_{gpu}.log",
+            ready_marker="[StageServer] Ready.",
         )
-        for branch in result["branch_results"]:
-            summary["input_io_s"] += branch["deserialize_s"]
-            summary["transport_s"] += branch["serialize_s"]
-            summary["backbone_s"] += branch["forward_s"]
-
-
-def _write_report(
-    params, process_lifetime_s, setup_s, setup_details, compute_s, summary
-):
-    pair_count = summary["pairs"]
-    if pair_count < 1:
-        raise ValueError("Cannot report an empty encrypted evaluation")
-    backbone_s = summary["backbone_s"]
-    normalization_s = summary["normalization_s"]
-    inner_product_s = summary["inner_product_s"]
-    input_io_s = summary["input_io_s"]
-    transport_s = summary["transport_s"]
-    report = {
-        "Encrypted computation": round(compute_s, 4),
-        "Total": round(setup_s + compute_s, 4),
-        "Server process lifetime": round(process_lifetime_s, 4),
-        "Pipeline load and key setup": round(setup_s, 4),
-        "Packed model I/O": round(setup_details.get("model_io_s", 0.0), 4),
-        "Runtime circuit compilation": round(
-            setup_details.get("compile_s", 0.0), 4
-        ),
-        "Ciphertext input I/O worker-seconds": round(input_io_s, 4),
-        "Ciphertext transport worker-seconds": round(transport_s, 4),
-        "Encrypted inference worker-seconds": round(
-            backbone_s + normalization_s + inner_product_s, 4
-        ),
-        "Backbone forward worker-seconds": round(backbone_s, 4),
-        "Normalization worker-seconds": round(normalization_s, 4),
-        "Inner product worker-seconds": round(inner_product_s, 4),
-        "Mean encrypted wall time per pair": round(compute_s / pair_count, 4),
-        "Timing semantics": {
-            "wall_time": [
-                "Encrypted computation",
-                "Total",
-                "Server process lifetime",
-                "Pipeline load and key setup",
-                "Packed model I/O",
-                "Runtime circuit compilation",
-                "Mean encrypted wall time per pair",
-            ],
-            "summed_worker_time": [
-                "Ciphertext input I/O worker-seconds",
-                "Ciphertext transport worker-seconds",
-                "Encrypted inference worker-seconds",
-                "Backbone forward worker-seconds",
-                "Normalization worker-seconds",
-                "Inner product worker-seconds",
-            ],
-        },
-    }
-    path = params.iodir() / "server_reported.json"
-    temporary = path.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps(report, indent=2) + "\n")
-    temporary.replace(path)
-
-
-def _create_workers(ctx, slot_count, timeout_s, aggregator_max_pairs):
-    slots = []
-    for slot_id in range(slot_count):
-        process, connection = _start(ctx, _slot_loop, timeout_s)
-        slots.append({
-            "id": slot_id,
-            "process": process,
-            "connection": connection,
-            "pair": None,
-            "started": None,
-        })
-    aggregator, aggregator_connection = _start(
-        ctx, _aggregator_manager_loop, aggregator_max_pairs, timeout_s
-    )
-    return slots, aggregator, aggregator_connection
-
-
-def _process_indices(
-    indices, total_pairs, slots, aggregator, aggregator_connection,
-    upload_dir, output_dir, timeout_s,
-):
-    stale = [
-        pair for pair in indices
-        if (output_dir / f"{pair_stem(pair)}_score.h5").exists()
+        for gpu in physical_gpus
     ]
-    if stale:
-        raise FileExistsError(
-            f"Refusing to reuse {len(stale)} pre-existing encrypted scores"
-        )
-    pending = deque(indices)
-    ready, in_aggregation, results = deque(), None, []
-    compute_t0 = time.time()
-    while pending or any(s["pair"] is not None for s in slots) or ready or in_aggregation:
-        for slot in slots:
-            if slot["pair"] is None and pending:
-                slot["pair"] = pending.popleft()
-                slot["started"] = time.time()
-                slot["connection"].send({
-                    "op": "run",
-                    "pair_idx": slot["pair"],
-                    "upload_dir": str(upload_dir),
-                })
-                print(
-                    f"[server] pair {slot['pair'] + 1}/{total_pairs} "
-                    f"-> slot {slot['id']}", flush=True,
-                )
-
-        for connection in wait([s["connection"] for s in slots], timeout=0.25):
-            slot = next(s for s in slots if s["connection"] is connection)
-            response = connection.recv()
-            if response["status"] != "pass":
-                raise RuntimeError(
-                    f"Slot {slot['id']} failed pair {slot['pair']}: "
-                    f"{response.get('message')}\n{response.get('traceback')}"
-                )
-            ready.append({
-                "pair_idx": slot["pair"],
-                "pair_started": slot["started"],
-                "branch_wall_s": response["branch_wall_s"],
-                "branch_results": response["branch_results"],
-            })
-            print(
-                f"[server] pair {slot['pair'] + 1}/{total_pairs} "
-                f"backbones complete [{response['branch_wall_s']:.1f}s]",
-                flush=True,
-            )
-            slot["pair"] = slot["started"] = None
-
-        if in_aggregation is None and ready:
-            in_aggregation = ready.popleft()
-            aggregator_connection.send({
-                "op": "aggregate",
-                "pair_idx": in_aggregation["pair_idx"],
-                "branch_results": in_aggregation["branch_results"],
-                "output_dir": str(output_dir),
-            })
-            for branch in in_aggregation["branch_results"]:
-                del branch["feature_serialized"]
-
-        if in_aggregation is not None and aggregator_connection.poll():
-            response = aggregator_connection.recv()
-            if response["status"] != "pass":
-                raise RuntimeError(
-                    f"Aggregator failed: {response.get('message')}\n"
-                    f"{response.get('traceback')}"
-                )
-            in_aggregation["aggregation"] = response["result"]
-            pair_wall_s = (
-                time.time() - in_aggregation["pair_started"]
-            )
-            results.append(in_aggregation)
-            print(
-                f"[server] pair {in_aggregation['pair_idx'] + 1}/{total_pairs} "
-                f"saved [{pair_wall_s:.1f}s]", flush=True,
-            )
-            in_aggregation = None
-
-        now = time.time()
-        for slot in slots:
-            if slot["pair"] is not None and now - slot["started"] > timeout_s:
-                raise TimeoutError(f"Pair {slot['pair']} timed out")
-            if not slot["process"].is_alive():
-                raise RuntimeError(
-                    f"Slot manager {slot['id']} exited unexpectedly"
-                )
-        if not aggregator.is_alive():
-            raise RuntimeError("Aggregator manager exited unexpectedly")
-
-    compute_s = time.time() - compute_t0
-    results.sort(key=lambda item: item["pair_idx"])
-    result_indices = [item["pair_idx"] for item in results]
-    if result_indices != sorted(indices):
-        raise RuntimeError(
-            f"Encrypted result set mismatch: expected {len(indices)}, "
-            f"received {len(results)}"
-        )
-    return compute_s, results
-
-
-def main():
-    global _pipeline, _embedding_dim, _n_patches
-
-    stage_t0 = time.time()
-    _size, cfg, params = parse_stage_args()
-    pair_slots = int(cfg["pair_slots"])
-    stage_chunk_pairs = int(cfg["stage_chunk_pairs"])
-    aggregator_max_pairs = int(cfg["aggregator_max_pairs"])
-    timeout_s = int(cfg["pair_timeout_s"])
-    if min(
-        pair_slots, stage_chunk_pairs, aggregator_max_pairs, timeout_s,
-    ) < 1:
-        raise ValueError("Server concurrency settings must be positive")
-
-    total_pairs = params.get_batch_size()
-    setup_t0 = time.time()
-    (
-        _pipeline, _embedding_dim, _n_patches, setup_details
-    ) = build_pipeline_load(cfg, params)
-    setup_s = time.time() - setup_t0
-
-    slot_count = min(pair_slots, total_pairs)
+    scorer_env = runtime_environment(physical_gpus[0])
+    scorer = NativeSession(
+        scorer_command(eval_context, task_dir),
+        env=scorer_env,
+        log_path=log_dir / "server_scorer.log",
+        ready_marker="[StageScorer] Ready.",
+    )
+    preparation_finished = time.monotonic()
     print(
-        f"[server_encrypted_compute] pairs={total_pairs} "
-        f"pair_slots={slot_count} "
-        f"max_branch_workers={2 * _n_patches * slot_count}",
+        f"[server_encrypted_compute] Starting {len(sessions)} persistent GPU workers "
+        f"on physical GPUs {physical_gpus} and one public-context GPU scorer",
         flush=True,
     )
-    ctx = multiprocessing.get_context("fork")
-    slots, aggregator, aggregator_connection = _create_workers(
-        ctx, slot_count, timeout_s, aggregator_max_pairs
-    )
-    summary = _empty_summary()
-    compute_s = 0.0
+    setup_started = time.monotonic()
     try:
-        upload_dir = params.iodir() / "ciphertexts_upload"
-        output_dir = params.iodir() / "ciphertexts_download"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        for indices in _index_chunks(total_pairs, stage_chunk_pairs):
-            _validate_pair_inputs(upload_dir, indices)
-            chunk_s, chunk_results = _process_indices(
-                indices, total_pairs, slots, aggregator,
-                aggregator_connection, upload_dir, output_dir, timeout_s,
-            )
-            compute_s += chunk_s
-            _accumulate_results(summary, chunk_results)
-            del chunk_results
-    finally:
-        for slot in slots:
-            _stop(slot["process"], slot["connection"])
-        _stop(aggregator, aggregator_connection)
+        with ThreadPoolExecutor(max_workers=len(sessions) + 1) as executor:
+            starts = [executor.submit(session.start) for session in sessions]
+            starts.append(executor.submit(scorer.start))
+            for future in as_completed(starts):
+                future.result()
+        setup_seconds = time.monotonic() - setup_started
+        pool: queue.Queue[NativeSession] = queue.Queue()
+        for session in sessions:
+            pool.put(session)
 
-    if summary["pairs"] != total_pairs:
-        raise RuntimeError(
-            f"Server processed {summary['pairs']}/{total_pairs} pairs"
+        session_gpu = dict(zip(sessions, physical_gpus))
+
+        def dispatch(payload: dict, submitted_at: float) -> dict:
+            dispatch_started = time.monotonic()
+            session = pool.get()
+            worker_acquired = time.monotonic()
+            try:
+                response = session.request(payload)
+                dispatch_finished = time.monotonic()
+                response["physical_gpu"] = session_gpu[session]
+                response["worker_request_index"] = getattr(
+                    session, "request_count", None
+                )
+                response["inference_dispatch_timing_seconds"] = {
+                    "executor_queue_wait": dispatch_started - submitted_at,
+                    "worker_pool_wait": worker_acquired - dispatch_started,
+                    "worker_request": dispatch_finished - worker_acquired,
+                    "dispatch_total": dispatch_finished - submitted_at,
+                }
+                return response
+            finally:
+                pool.put(session)
+
+        def score_dispatch(payload: dict, submitted_at: float) -> dict:
+            dispatch_started = time.monotonic()
+            response = scorer.request(payload)
+            if response.get("matching_backend") != "gpu":
+                raise RuntimeError("GPU matching required; CPU fallback is forbidden")
+            dispatch_finished = time.monotonic()
+            response["scorer_dispatch_timing_seconds"] = {
+                "executor_queue_wait": dispatch_started - submitted_at,
+                "scorer_request": dispatch_finished - dispatch_started,
+                "dispatch_total": dispatch_finished - submitted_at,
+            }
+            return response
+
+        compute_started = time.monotonic()
+        inference_started = compute_started
+        inference_responses = []
+        match_responses = []
+        ready_embeddings = [0] * pair_count
+        matching_started: float | None = None
+        match_futures = []
+        with (
+            ThreadPoolExecutor(max_workers=len(sessions)) as inference_executor,
+            ThreadPoolExecutor(max_workers=1) as score_executor,
+        ):
+            submission_started = time.monotonic()
+            future_to_pair = {}
+            for pair_index in range(pair_count):
+                for image_index in range(2):
+                    image_id = f"{pair_stem(pair_index)}_i{image_index}"
+                    inputs = {
+                        name: str(upload_dir / f"{image_id}__{name}.ct")
+                        for name in input_names
+                    }
+                    missing = [path for path in inputs.values() if not Path(path).is_file()]
+                    if missing:
+                        raise FileNotFoundError(f"Missing encrypted input(s): {missing[:2]}")
+                    submitted_at = time.monotonic()
+                    future = inference_executor.submit(
+                        dispatch,
+                        {
+                            "op": "infer",
+                            "id": image_id,
+                            "inputs": inputs,
+                            "output": str(work_dir / f"{image_id}_embedding.ct"),
+                        },
+                        submitted_at,
+                    )
+                    future_to_pair[future] = pair_index
+            submission_finished = time.monotonic()
+            completed = 0
+            for future in as_completed(future_to_pair):
+                inference_responses.append(future.result())
+                completed += 1
+                pair_index = future_to_pair[future]
+                ready_embeddings[pair_index] += 1
+                if stream_scoring and ready_embeddings[pair_index] == 2:
+                    if matching_started is None:
+                        matching_started = time.monotonic()
+                    stem = pair_stem(pair_index)
+                    submitted_at = time.monotonic()
+                    match_futures.append(
+                        score_executor.submit(
+                            score_dispatch,
+                            {
+                                "op": "score",
+                                "id": stem,
+                                "left": str(work_dir / f"{stem}_i0_embedding.ct"),
+                                "right": str(work_dir / f"{stem}_i1_embedding.ct"),
+                                "output": str(download_dir / f"{stem}_score.ct"),
+                                "embedding_dim": int(cfg["embedding_dim"]),
+                            },
+                            submitted_at,
+                        )
+                    )
+                print(
+                    f"[server_encrypted_compute] embeddings {completed}/{2 * pair_count}",
+                    flush=True,
+                )
+            inference_finished = time.monotonic()
+
+            if not stream_scoring:
+                matching_started = time.monotonic()
+                for pair_index in range(pair_count):
+                    stem = pair_stem(pair_index)
+                    submitted_at = time.monotonic()
+                    match_futures.append(
+                        score_executor.submit(
+                            score_dispatch,
+                            {
+                                "op": "score",
+                                "id": stem,
+                                "left": str(work_dir / f"{stem}_i0_embedding.ct"),
+                                "right": str(work_dir / f"{stem}_i1_embedding.ct"),
+                                "output": str(download_dir / f"{stem}_score.ct"),
+                                "embedding_dim": int(cfg["embedding_dim"]),
+                            },
+                            submitted_at,
+                        )
+                    )
+
+            if len(match_futures) != pair_count:
+                raise RuntimeError(
+                    f"Scheduled {len(match_futures)} encrypted scores; expected {pair_count}"
+                )
+            completed = 0
+            for future in as_completed(match_futures):
+                match_responses.append(future.result())
+                completed += 1
+                print(
+                    f"[server_encrypted_compute] encrypted scores {completed}/{pair_count}",
+                    flush=True,
+                )
+        compute_finished = time.monotonic()
+        inference_seconds = inference_finished - inference_started
+        matching_seconds = (
+            0.0 if matching_started is None else compute_finished - matching_started
         )
-    _write_report(
-        params, time.time() - stage_t0, setup_s, setup_details,
-        compute_s, summary,
+        encrypted_compute_seconds = compute_finished - compute_started
+        overlap_seconds = (
+            0.0
+            if matching_started is None
+            else max(0.0, inference_finished - matching_started)
+        )
+    finally:
+        shutdown_started = time.monotonic()
+        with ThreadPoolExecutor(max_workers=len(sessions) + 1) as executor:
+            closes = [executor.submit(session.close) for session in sessions]
+            closes.append(executor.submit(scorer.close))
+            for future in as_completed(closes):
+                future.result()
+        shutdown_finished = time.monotonic()
+
+    cleanup_started = time.monotonic()
+    for path in upload_dir.glob("*.ct"):
+        release_file_cache(path)
+        if not keep_stage_inputs:
+            path.unlink()
+    for path in work_dir.glob("*.ct"):
+        release_file_cache(path)
+        if not keep_stage_inputs:
+            path.unlink()
+    cleanup_finished = time.monotonic()
+    encrypted_output_bytes = sum(path.stat().st_size for path in download_dir.glob("*.ct"))
+    report_path = params.iodir() / "submission_reported.json"
+    bandwidth = json.loads(report_path.read_text()) if report_path.exists() else {
+        "schema_version": 1,
+        "Bandwidth": {},
+    }
+    bandwidth["Bandwidth"]["Encrypted outputs"] = encrypted_output_bytes
+    atomic_write_json(report_path, bandwidth)
+    accounting_finished = time.monotonic()
+
+    report_build_started = time.monotonic()
+    latti_timings_by_id: dict[str, dict[str, float]] = {}
+    for session in sessions:
+        latti_timings_by_id.update(_parse_latti_request_timings(session.log_path))
+    for response in inference_responses:
+        request_id = response.get("id")
+        if request_id in latti_timings_by_id:
+            response["latti_timing_seconds"] = latti_timings_by_id[request_id]
+    all_responses = inference_responses + match_responses
+    stage_seconds_before_report_write = report_build_started - stage_started
+    report = {
+        "Encrypted computation": encrypted_compute_seconds,
+        "Total": stage_seconds_before_report_write,
+        "additional_measurements": {
+            "stage_timing_seconds": {
+                "argument_parse_and_runtime_validation": (
+                    runtime_validation_finished - stage_started
+                ),
+                "preparation": preparation_finished - runtime_validation_finished,
+                "worker_setup": setup_seconds,
+                "inference_task_submission": submission_finished - submission_started,
+                "encrypted_compute": encrypted_compute_seconds,
+                "worker_shutdown": shutdown_finished - shutdown_started,
+                "stage_input_cleanup": cleanup_finished - cleanup_started,
+                "output_accounting": accounting_finished - cleanup_finished,
+            },
+            "GPU worker setup": setup_seconds,
+            "Encrypted embedding inference": inference_seconds,
+            "Encrypted pair matching": matching_seconds,
+            "Encrypted inference/matching overlap": overlap_seconds,
+            "Scheduling mode": (
+                "streamed_encrypted_score"
+                if stream_scoring
+                else "sequential_encrypted_score"
+            ),
+            "Pair count": pair_count,
+            "GPU key cache": os.environ.get("CRYPTOFACE_GPU_KEY_CACHE", "1"),
+            "GPU event cache": os.environ.get("CRYPTOFACE_GPU_EVENT_CACHE", "1"),
+            "Scorer startup": scorer.startup_seconds,
+            "Matching backend": "gpu",
+            "Matching physical GPU": physical_gpus[0],
+            "Throughput": {
+                "images_per_second_during_inference": (
+                    2 * pair_count
+                ) / inference_seconds,
+                "pairs_per_second_end_to_end_compute": (
+                    pair_count / encrypted_compute_seconds
+                ),
+            },
+            "workers": {
+                "gpu_count": len(physical_gpus),
+                "physical_gpus": physical_gpus,
+                "cpu_affinity": inherited_cpu_affinity,
+                "startup_seconds": [
+                    session.startup_seconds for session in sessions
+                ],
+                "scorer_startup_seconds": scorer.startup_seconds,
+            },
+            "native": {
+                "inference_core_seconds": [
+                    response.get("inference_seconds")
+                    for response in inference_responses
+                ],
+                "matching_core_seconds": [
+                    response.get("matching_seconds")
+                    for response in match_responses
+                ],
+                "request_timings": {
+                    "inference": sorted(
+                        inference_responses, key=lambda response: response.get("id", "")
+                    ),
+                    "matching": sorted(
+                        match_responses, key=lambda response: response.get("id", "")
+                    ),
+                },
+                "timing_summary": {
+                    "inference": _timing_summary(inference_responses),
+                    "inference_hot": _timing_summary(
+                        [
+                            response
+                            for response in inference_responses
+                            if (response.get("worker_request_index") or 0) > 1
+                        ]
+                    ),
+                    "matching": _timing_summary(match_responses),
+                    "all_requests": _timing_summary(all_responses),
+                },
+            },
+        },
+    }
+    report_build_finished = time.monotonic()
+    report["additional_measurements"]["stage_timing_seconds"]["report_build"] = (
+        report_build_finished - report_build_started
     )
+    report_write_started = time.monotonic()
+    atomic_write_json(params.iodir() / "server_reported.json", report)
+    report_write_finished = time.monotonic()
+    report["additional_measurements"]["stage_timing_seconds"]["report_write"] = (
+        report_write_finished - report_write_started
+    )
+    stage_seconds = report_write_finished - stage_started
+    report["Total"] = stage_seconds
+    stage_timings = report["additional_measurements"]["stage_timing_seconds"]
+    # Task submission is a nested part of encrypted_compute, so do not
+    # double-count it in the stage-level accounting reconciliation.
+    accounted_seconds = sum(
+        value
+        for name, value in stage_timings.items()
+        if name != "inference_task_submission"
+    )
+    stage_timings["accounted_before_final_write"] = accounted_seconds
+    stage_timings["unattributed_before_final_write"] = (
+        stage_seconds - accounted_seconds
+    )
+    atomic_write_json(params.iodir() / "server_reported.json", report)
     print(
-        f"[server_encrypted_compute] Done: {summary['pairs']} pairs in "
-        f"{compute_s:.1f}s "
-        f"({summary['pairs'] / compute_s * 3600:.2f} pairs/hour)",
+        f"[server_encrypted_compute] Completed {pair_count} pairs in {stage_seconds:.1f}s "
+        f"({pair_count / encrypted_compute_seconds * 3600:.2f} pairs/hour)",
         flush=True,
     )
 

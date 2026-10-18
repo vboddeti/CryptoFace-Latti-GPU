@@ -1,0 +1,128 @@
+diff --git a/inference/interface/inference_client.h b/inference/interface/inference_client.h
+index 84479e0..6d269ba 100644
+--- a/inference/interface/inference_client.h
++++ b/inference/interface/inference_client.h
+@@ -75,10 +75,16 @@ public:
+     /// Read configuration and generate crypto context with keys.
+     void setup();
+ 
++    /// Read configuration and restore a previously generated private context.
++    void setup_from_secret_context(const Bytes& secret_context);
++
+     /// Export a public-only evaluation context (serialized bytes).
+     /// The server uses this to perform encrypted computation without the secret key.
+     Bytes export_eval_context() const;
+ 
++    /// Export the complete client-owned context, including the secret key.
++    Bytes export_secret_context() const;
++
+     /// Encrypt inputs from CSV files and return serialized ciphertexts.
+     /// @param input_csvs  Map of input name -> CSV file path.
+     /// @return Map of input name -> serialized ciphertext bytes.
+diff --git a/inference/interface/inference_client.cpp b/inference/interface/inference_client.cpp
+index 10b70a4..c4190fb 100644
+--- a/inference/interface/inference_client.cpp
++++ b/inference/interface/inference_client.cpp
+@@ -143,6 +143,28 @@ void InferenceClient::setup() {
+     create_crypto_context();
+ }
+ 
++void InferenceClient::setup_from_secret_context(const Bytes& secret_context) {
++    read_configuration();
++    if (needs_btp_) {
++        btp_context_ = std::make_unique<CkksBtpContext>(
++            CkksBtpContext::deserialize(secret_context));
++        context_ptr_ = btp_context_.get();
++    } else {
++        ckks_context_ = std::make_unique<CkksContext>(
++            CkksContext::deserialize_advanced(secret_context));
++        context_ptr_ = ckks_context_.get();
++    }
++}
++
++Bytes InferenceClient::export_secret_context() const {
++    if (needs_btp_) {
++        if (!btp_context_) throw std::runtime_error("BTP client context is not initialized");
++        return btp_context_->serialize();
++    }
++    if (!ckks_context_) throw std::runtime_error("CKKS client context is not initialized");
++    return ckks_context_->serialize_advanced();
++}
++
+ Bytes InferenceClient::export_eval_context() const {
+     std::cout << "[Client] Exporting evaluation context..." << std::endl;
+     Bytes result;
+diff --git a/inference/interface/inference_server.h b/inference/interface/inference_server.h
+index 4b94418..1577e9e 100644
+--- a/inference/interface/inference_server.h
++++ b/inference/interface/inference_server.h
+@@ -59,5 +59,9 @@ public:
+     /// Returns map of output name -> serialized ciphertext bytes.
+     std::map<std::string, Bytes> evaluate(const std::map<std::string, Bytes>& encrypted_inputs);
+ 
++    /// Compute a scalar encrypted inner product from two serialized embeddings.
++    Bytes compute_inner_product(const Bytes& left, const Bytes& right,
++                                int embedding_dim = 256) const;
++
+     /// Run plaintext inference on CSV input files (for verification).
+     std::map<std::string, std::vector<double>> evaluate_plaintext(const std::map<std::string, std::string>& input_csvs);
+diff --git a/inference/interface/inference_server.cpp b/inference/interface/inference_server.cpp
+index 86016bc..b6062aa 100644
+--- a/inference/interface/inference_server.cpp
++++ b/inference/interface/inference_server.cpp
+@@ -204,5 +204,55 @@ std::map<std::string, Bytes> InferenceServer::evaluate(const std::map<std::strin
+     return encrypted_outputs;
+ }
+ 
++Bytes InferenceServer::compute_inner_product(const Bytes& left_bytes,
++                                             const Bytes& right_bytes,
++                                             int embedding_dim) const {
++    if (context_ptr_ == nullptr) {
++        throw std::runtime_error("Evaluation context is not initialized");
++    }
++    Feature0DEncrypted left(context_ptr_, 0);
++    Feature0DEncrypted right(context_ptr_, 0);
++    left.deserialize(left_bytes);
++    right.deserialize(right_bytes);
++    if (embedding_dim <= 0 || left.n_channel != (uint32_t)embedding_dim ||
++        right.n_channel != (uint32_t)embedding_dim) {
++        throw std::runtime_error("Unexpected encrypted embedding dimension");
++    }
++    if (left.data.size() != right.data.size() || left.data.empty() ||
++        left.skip != right.skip || left.n_channel_per_ct != right.n_channel_per_ct) {
++        throw std::runtime_error("Encrypted embedding layouts do not match");
++    }
++
++    auto& ctx = *context_ptr_;
++    const double scale = ctx.get_parameter().get_default_scale();
++    std::vector<ls::CkksCiphertext> partial_sums;
++    partial_sums.reserve(left.data.size());
++    for (size_t index = 0; index < left.data.size(); ++index) {
++        auto product = ctx.rescale(
++            ctx.relinearize(ctx.mult(left.data[index], right.data[index])), scale);
++        auto partial = product.copy();
++        for (uint32_t offset = 1; offset < left.n_channel_per_ct; offset <<= 1) {
++            auto rotated = ctx.rotate(partial, (int)(offset * left.skip));
++            partial = ctx.add(partial, rotated);
++        }
++        partial_sums.push_back(std::move(partial));
++    }
++    auto score = partial_sums.front().copy();
++    for (size_t index = 1; index < partial_sums.size(); ++index) {
++        auto term = partial_sums[index].copy();
++        while (score.get_level() > term.get_level()) score = ctx.drop_level(score);
++        while (term.get_level() > score.get_level()) term = ctx.drop_level(term);
++        score = ctx.add(score, term);
++    }
++
++    Feature0DEncrypted output(context_ptr_, score.get_level());
++    output.n_channel = 1;
++    output.n_channel_per_ct = 1;
++    output.skip = left.skip;
++    output.ckks_scale = scale;
++    output.data.push_back(std::move(score));
++    return output.serialize();
++}
++
+ std::map<std::string, std::vector<double>>
+ InferenceServer::evaluate_plaintext(const std::map<std::string, std::string>& input_csvs) {
